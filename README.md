@@ -60,7 +60,7 @@ npm run build
 Inside Codex:
 
 ```text
-claude-to-im setup
+codex-to-im setup
 ```
 
 If interactive setup is unavailable, create:
@@ -80,7 +80,7 @@ config.env.example
 Inside Codex:
 
 ```text
-claude-to-im start
+codex-to-im start
 ```
 
 If you want plain `start` to run in the current foreground Terminal session instead of a background supervisor, add this to `~/.claude-to-im/config.env`:
@@ -152,6 +152,26 @@ After setup and start:
 2. The daemon creates or resumes an agent session
 3. Responses, tool calls, and permission prompts return to chat
 
+## Command Aliases
+
+Command aliases decide the bridge runtime explicitly, regardless of which tool you are currently using:
+
+- `codex-to-im ...` forces the bridge to run with Codex runtime for that command
+- `claude-to-im ...` forces the bridge to run with Claude runtime for that command
+- plain commands like `start bridge` continue to use `CTI_RUNTIME` from `~/.claude-to-im/config.env`
+
+Examples:
+
+```text
+codex-to-im start
+claude-to-im start
+```
+
+That means:
+
+- in Codex, `claude-to-im start` should still launch a Claude-backed bridge
+- in Claude Code, `codex-to-im start` should still launch a Codex-backed bridge
+
 ## Tool Approval Policy
 
 Configure `CTI_PERMISSION_POLICY` in `~/.claude-to-im/config.env`:
@@ -192,14 +212,15 @@ Use these commands inside Codex or Claude Code:
 
 | Command | Purpose |
 |---|---|
-| `claude-to-im setup` | Configure platform credentials and runtime |
-| `claude-to-im start` | Start the daemon |
-| `claude-to-im stop` | Stop the daemon |
-| `claude-to-im status` | Show current status |
-| `claude-to-im logs` | Tail recent logs |
-| `claude-to-im logs 200` | Tail more logs |
-| `claude-to-im reconfigure` | Update existing config |
-| `claude-to-im doctor` | Run diagnostics |
+| `codex-to-im setup` | Configure the bridge, defaulting runtime to Codex |
+| `codex-to-im start` | Start the bridge with Codex runtime |
+| `claude-to-im setup` | Configure the bridge, defaulting runtime to Claude |
+| `claude-to-im start` | Start the bridge with Claude runtime |
+| `codex-to-im stop` / `claude-to-im stop` | Stop the running bridge |
+| `codex-to-im status` / `claude-to-im status` | Show current status |
+| `codex-to-im logs 200` / `claude-to-im logs 200` | Tail logs |
+| `codex-to-im reconfigure` / `claude-to-im reconfigure` | Update existing config |
+| `codex-to-im doctor` / `claude-to-im doctor` | Run diagnostics |
 
 For users who want the bridge to run in the current login session instead of a background supervisor, use:
 

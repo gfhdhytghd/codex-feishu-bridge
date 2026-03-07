@@ -1,11 +1,11 @@
 ---
 name: claude-to-im
 description: |
-  This skill bridges Claude Code to IM platforms (Telegram, Discord, Feishu/Lark).
+  This skill bridges Codex or Claude Code to IM platforms (Telegram, Discord, Feishu/Lark).
   It should be used when the user wants to start a background daemon that forwards
-  IM messages to Claude Code sessions, or manage that daemon's lifecycle.
-  Trigger on: "claude-to-im", "start bridge", "stop bridge", "bridge status",
-  "查看日志", "启动桥接", "停止桥接", or any mention of IM bridge management.
+  IM messages to Codex or Claude Code sessions, or manage that daemon's lifecycle.
+  Trigger on: "claude-to-im", "codex-to-im", "start bridge", "stop bridge",
+  "bridge status", "查看日志", "启动桥接", "停止桥接", or any mention of IM bridge management.
   Subcommands: setup, start, stop, status, logs, reconfigure, doctor.
 argument-hint: "setup | start | stop | status | logs [N] | reconfigure | doctor"
 allowed-tools:
@@ -18,9 +18,9 @@ allowed-tools:
   - Glob
 ---
 
-# Claude-to-IM Bridge Skill
+# Codex / Claude-to-IM Bridge Skill
 
-You are managing the Claude-to-IM bridge.
+You are managing the Codex / Claude-to-IM bridge.
 User data is stored at `~/.claude-to-im/`.
 
 First, locate the skill directory by finding this SKILL.md file:
@@ -33,15 +33,26 @@ Parse the user's intent from `$ARGUMENTS` into one of these subcommands:
 
 | User says (examples) | Subcommand |
 |---|---|
-| `setup`, `configure`, `配置` | setup |
-| `start`, `start bridge`, `启动`, `启动桥接` | start |
-| `stop`, `stop bridge`, `停止`, `停止桥接` | stop |
-| `status`, `bridge status`, `状态` | status |
-| `logs`, `logs 200`, `查看日志`, `查看日志 200` | logs |
-| `reconfigure`, `修改配置` | reconfigure |
-| `doctor`, `diagnose`, `诊断` | doctor |
+| `claude-to-im setup`, `codex-to-im setup`, `setup`, `configure`, `配置` | setup |
+| `claude-to-im start`, `codex-to-im start`, `start`, `start bridge`, `启动`, `启动桥接` | start |
+| `claude-to-im stop`, `codex-to-im stop`, `stop`, `stop bridge`, `停止`, `停止桥接` | stop |
+| `claude-to-im status`, `codex-to-im status`, `status`, `bridge status`, `状态` | status |
+| `claude-to-im logs`, `codex-to-im logs`, `logs`, `logs 200`, `查看日志`, `查看日志 200` | logs |
+| `claude-to-im reconfigure`, `codex-to-im reconfigure`, `reconfigure`, `修改配置` | reconfigure |
+| `claude-to-im doctor`, `codex-to-im doctor`, `doctor`, `diagnose`, `诊断` | doctor |
 
 Extract optional numeric argument for `logs` (default 50).
+
+Also detect whether the user explicitly invoked one of these command aliases:
+
+- `codex-to-im ...` — force this operation to use Codex runtime by exporting `CTI_RUNTIME_OVERRIDE=codex`
+- `claude-to-im ...` — force this operation to use Claude runtime by exporting `CTI_RUNTIME_OVERRIDE=claude`
+- No explicit alias — respect the saved `CTI_RUNTIME` from `~/.claude-to-im/config.env`
+
+This alias rule takes precedence over the current tool you are running in. For example:
+
+- In Codex, `claude-to-im start` should still start a Claude-backed bridge
+- In Claude Code, `codex-to-im start` should still start a Codex-backed bridge
 
 **IMPORTANT:** Before asking users for any platform credentials, first read `SKILL_DIR/references/setup-guides.md` to get the detailed step-by-step guidance for that platform. Present the relevant guide text to the user via AskUserQuestion so they know exactly what to do.
 
@@ -93,6 +104,8 @@ Ask for runtime, default working directory, model, and mode:
   - `claude` — uses Claude Code CLI + Claude Agent SDK (requires `claude` CLI installed)
   - `codex` — uses OpenAI Codex SDK (requires `codex` CLI; auth via `codex auth login` or `OPENAI_API_KEY`)
   - `auto` — tries Claude first, falls back to Codex if Claude CLI not found
+- If the user invoked `codex-to-im setup`, default the runtime choice to `codex` unless they explicitly ask for something else
+- If the user invoked `claude-to-im setup`, default the runtime choice to `claude` unless they explicitly ask for something else
 - **Working Directory**: default `$CWD`
 - **Model** (optional): Leave blank to inherit the runtime's own default model. If the user wants to override, ask them to enter a model name. Do NOT hardcode or suggest specific model names — the available models change over time.
 - **Mode**: `code` (default), `plan`, `ask`
@@ -109,7 +122,9 @@ Ask for runtime, default working directory, model, and mode:
    - Feishu: `curl -s -X POST "${DOMAIN}/open-apis/auth/v3/tenant_access_token/internal" -H "Content-Type: application/json" -d '{"app_id":"...","app_secret":"..."}'` — check for `"code":0`
    - Discord: verify token matches format `[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`
 7. Report results with a summary table. If any validation fails, explain what might be wrong and how to fix it.
-8. On success, tell the user: "Setup complete! Run `/claude-to-im start` to start the bridge."
+8. On success:
+   - if the user invoked `codex-to-im setup`, tell them: "Setup complete! Run `codex-to-im start` to start the Codex bridge."
+   - otherwise tell them: "Setup complete! Run `claude-to-im start` to start the Claude bridge."
 
 ### `start`
 
@@ -117,9 +132,15 @@ Ask for runtime, default working directory, model, and mode:
 
 Run: `bash "SKILL_DIR/scripts/daemon.sh" start`
 
+If the user explicitly invoked `codex-to-im start`, run:
+`CTI_RUNTIME_OVERRIDE=codex bash "SKILL_DIR/scripts/daemon.sh" start`
+
+If the user explicitly invoked `claude-to-im start`, run:
+`CTI_RUNTIME_OVERRIDE=claude bash "SKILL_DIR/scripts/daemon.sh" start`
+
 Show the output to the user. If it fails, tell the user:
-- Run `doctor` to diagnose: `/claude-to-im doctor`
-- Check recent logs: `/claude-to-im logs`
+- Run `doctor` to diagnose: `codex-to-im doctor` or `claude-to-im doctor`
+- Check recent logs: `codex-to-im logs` or `claude-to-im logs`
 
 ### `stop`
 
@@ -142,7 +163,9 @@ Run: `bash "SKILL_DIR/scripts/daemon.sh" logs N`
 4. When collecting new values, read `SKILL_DIR/references/setup-guides.md` and present the relevant guide for that field
 5. Update the config file atomically (write to tmp, rename)
 6. Re-validate any changed tokens
-7. Remind user: "Run `/claude-to-im stop` then `/claude-to-im start` to apply the changes."
+7. Remind the user to restart with the alias that matches the runtime they want, for example:
+   - `codex-to-im stop` then `codex-to-im start`
+   - `claude-to-im stop` then `claude-to-im start`
 
 ### `doctor`
 

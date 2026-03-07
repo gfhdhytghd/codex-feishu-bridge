@@ -67,6 +67,7 @@ fi
 
 echo ""
 echo "Done! Start a new Codex session and use:"
-echo "  claude-to-im setup    — configure IM platform credentials"
-echo "  claude-to-im start    — start the bridge daemon"
-echo "  claude-to-im doctor   — diagnose issues"
+echo "  codex-to-im setup     — configure IM platform credentials for Codex runtime"
+echo "  codex-to-im start     — start the bridge with Codex runtime"
+echo "  claude-to-im start    — start the bridge with Claude runtime"
+echo "  codex-to-im doctor    — diagnose issues"

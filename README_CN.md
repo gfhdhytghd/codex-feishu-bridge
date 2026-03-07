@@ -60,7 +60,7 @@ npm run build
 在 Codex 里执行：
 
 ```text
-claude-to-im setup
+codex-to-im setup
 ```
 
 如果当前环境不支持交互式配置，就手动创建：
@@ -80,7 +80,7 @@ config.env.example
 在 Codex 里执行：
 
 ```text
-claude-to-im start
+codex-to-im start
 ```
 
 如果你希望以后普通 `start` 默认就在当前前台 Terminal 会话里运行，而不是后台 supervisor，在 `~/.claude-to-im/config.env` 里加入：
@@ -152,6 +152,26 @@ config.env.example
 2. 守护进程会创建或恢复代理会话
 3. 响应内容、工具调用和权限确认会回到聊天里
 
+## 命令别名语义
+
+命令前缀会显式决定本次桥接使用哪个 runtime，不取决于你当前正在哪个工具里：
+
+- `codex-to-im ...`：本次命令强制使用 Codex runtime
+- `claude-to-im ...`：本次命令强制使用 Claude runtime
+- 像 `start bridge` 这种不带前缀的自然语言，继续沿用 `~/.claude-to-im/config.env` 里的 `CTI_RUNTIME`
+
+例如：
+
+```text
+codex-to-im start
+claude-to-im start
+```
+
+这意味着：
+
+- 在 Codex 里执行 `claude-to-im start`，也应该启动 Claude runtime 的桥接
+- 在 Claude Code 里执行 `codex-to-im start`，也应该启动 Codex runtime 的桥接
+
 ## 工具审批策略
 
 在 `~/.claude-to-im/config.env` 里配置 `CTI_PERMISSION_POLICY`：
@@ -192,14 +212,15 @@ CTI_PERMISSION_POLICY=smart
 
 | 命令 | 用途 |
 |---|---|
-| `claude-to-im setup` | 配置平台凭据与运行时 |
-| `claude-to-im start` | 启动守护进程 |
-| `claude-to-im stop` | 停止守护进程 |
-| `claude-to-im status` | 查看状态 |
-| `claude-to-im logs` | 查看最近日志 |
-| `claude-to-im logs 200` | 查看更多日志 |
-| `claude-to-im reconfigure` | 修改已有配置 |
-| `claude-to-im doctor` | 运行诊断 |
+| `codex-to-im setup` | 配置桥接，并默认把 runtime 设为 Codex |
+| `codex-to-im start` | 以 Codex runtime 启动桥接 |
+| `claude-to-im setup` | 配置桥接，并默认把 runtime 设为 Claude |
+| `claude-to-im start` | 以 Claude runtime 启动桥接 |
+| `codex-to-im stop` / `claude-to-im stop` | 停止当前桥接 |
+| `codex-to-im status` / `claude-to-im status` | 查看状态 |
+| `codex-to-im logs 200` / `claude-to-im logs 200` | 查看日志 |
+| `codex-to-im reconfigure` / `claude-to-im reconfigure` | 修改已有配置 |
+| `codex-to-im doctor` / `claude-to-im doctor` | 运行诊断 |
 
 如果你希望桥接运行在当前登录前台会话里，而不是后台 supervisor，可使用：
 

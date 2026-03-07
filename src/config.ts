@@ -34,6 +34,10 @@ export interface Config {
 export const CTI_HOME = process.env.CTI_HOME || path.join(os.homedir(), ".claude-to-im");
 export const CONFIG_PATH = path.join(CTI_HOME, "config.env");
 
+export function normalizeRuntime(value: string | undefined): Config["runtime"] {
+  return (["claude", "codex", "auto"].includes(value || "") ? value : "claude") as Config["runtime"];
+}
+
 function parseEnvFile(content: string): Map<string, string> {
   const entries = new Map<string, string>();
   for (const line of content.split("\n")) {
@@ -72,8 +76,7 @@ export function loadConfig(): Config {
     // Config file doesn't exist yet — use defaults
   }
 
-  const rawRuntime = env.get("CTI_RUNTIME") || "claude";
-  const runtime = (["claude", "codex", "auto"].includes(rawRuntime) ? rawRuntime : "claude") as Config["runtime"];
+  const runtime = normalizeRuntime(process.env.CTI_RUNTIME_OVERRIDE || env.get("CTI_RUNTIME") || "claude");
   const rawCodexSandboxMode = env.get("CTI_CODEX_SANDBOX_MODE") || "danger-full-access";
   const codexSandboxMode = (
     ["read-only", "workspace-write", "danger-full-access"].includes(rawCodexSandboxMode)

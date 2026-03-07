@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { maskSecret, configToSettings, type Config } from '../config.js';
+import { maskSecret, configToSettings, normalizeRuntime, type Config } from '../config.js';
 import { normalizePermissionPolicy } from '../permission-policy.js';
 
 // ── maskSecret ──
@@ -170,5 +170,18 @@ describe('normalizePermissionPolicy', () => {
   it('defaults to always for backward compatibility', () => {
     assert.equal(normalizePermissionPolicy(undefined, false), 'always');
     assert.equal(normalizePermissionPolicy('invalid', false), 'always');
+  });
+});
+
+describe('normalizeRuntime', () => {
+  it('accepts explicit runtime values', () => {
+    assert.equal(normalizeRuntime('claude'), 'claude');
+    assert.equal(normalizeRuntime('codex'), 'codex');
+    assert.equal(normalizeRuntime('auto'), 'auto');
+  });
+
+  it('falls back to claude for invalid or missing values', () => {
+    assert.equal(normalizeRuntime(undefined), 'claude');
+    assert.equal(normalizeRuntime('invalid'), 'claude');
   });
 });

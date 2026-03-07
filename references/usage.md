@@ -1,13 +1,20 @@
 # Usage Guide
 
-This skill works with both **Claude Code** (via `/claude-to-im` slash commands) and **Codex** (via natural language like "start bridge", "配置", "诊断"). All commands below use Claude Code syntax; Codex users can use equivalent natural language.
+This skill works with both **Claude Code** and **Codex**.
+
+Runtime alias rules:
+
+- `codex-to-im ...` forces Codex runtime for that command
+- `claude-to-im ...` forces Claude runtime for that command
+- plain commands like `start bridge` keep using the saved `CTI_RUNTIME`
 
 ## setup
 
 Interactive wizard that configures the bridge.
 
 ```
-/claude-to-im setup
+codex-to-im setup
+claude-to-im setup
 ```
 
 The wizard will prompt you for:
@@ -43,19 +50,21 @@ Config written to ~/.claude-to-im/config.env
 Starts the bridge daemon in the background.
 
 ```
-/claude-to-im start
+codex-to-im start
+claude-to-im start
 ```
 
 The daemon process ID is stored in `~/.claude-to-im/runtime/bridge.pid`. If the daemon is already running, the command reports the existing process.
 
-If startup fails, run `/claude-to-im doctor` to diagnose issues.
+If startup fails, run `codex-to-im doctor` or `claude-to-im doctor` to diagnose issues.
 
 ## stop
 
 Stops the running bridge daemon.
 
 ```
-/claude-to-im stop
+codex-to-im stop
+claude-to-im stop
 ```
 
 Sends SIGTERM to the daemon process and cleans up the PID file.
@@ -65,7 +74,8 @@ Sends SIGTERM to the daemon process and cleans up the PID file.
 Shows whether the daemon is running and basic health information.
 
 ```
-/claude-to-im status
+codex-to-im status
+claude-to-im status
 ```
 
 Output includes:
@@ -79,8 +89,9 @@ Output includes:
 Shows recent log output from the daemon.
 
 ```
-/claude-to-im logs        # Last 50 lines (default)
-/claude-to-im logs 200    # Last 200 lines
+codex-to-im logs        # Last 50 lines (default)
+codex-to-im logs 200    # Last 200 lines
+claude-to-im logs 200   # Same log stream, explicit Claude alias
 ```
 
 Logs are stored in `~/.claude-to-im/logs/` and are automatically redacted to mask secrets.
@@ -90,14 +101,15 @@ Logs are stored in `~/.claude-to-im/logs/` and are automatically redacted to mas
 Interactively update the current configuration.
 
 ```
-/claude-to-im reconfigure
+codex-to-im reconfigure
+claude-to-im reconfigure
 ```
 
 Displays current settings with secrets masked, then prompts for changes. After updating, you must restart the daemon for changes to take effect:
 
 ```
-/claude-to-im stop
-/claude-to-im start
+codex-to-im stop
+codex-to-im start
 ```
 
 ## doctor
@@ -105,7 +117,8 @@ Displays current settings with secrets masked, then prompts for changes. After u
 Runs diagnostic checks and reports issues.
 
 ```
-/claude-to-im doctor
+codex-to-im doctor
+claude-to-im doctor
 ```
 
 Checks performed:
