@@ -83,6 +83,12 @@ config.env.example
 claude-to-im start
 ```
 
+如果你希望以后普通 `start` 默认就在当前前台 Terminal 会话里运行，而不是后台 supervisor，在 `~/.claude-to-im/config.env` 里加入：
+
+```env
+CTI_RUN_MODE=foreground
+```
+
 ### Codex 用户说明
 
 - `CTI_RUNTIME=codex` 表示强制使用 Codex
@@ -209,6 +215,14 @@ bash scripts/daemon.sh start --foreground
 
 这在 macOS 上尤其有用，因为 Telegram 驱动的 Codex 会话会更接近你手动在终端里启动 Codex 时的浏览器 / AppleScript / 前台桌面上下文能力。
 
+如果你不想每次都手动带 `--foreground`，可以在 `~/.claude-to-im/config.env` 里设置：
+
+```env
+CTI_RUN_MODE=foreground
+```
+
+这样之后普通的 `claude-to-im start` 或 `bash scripts/daemon.sh start` 也会直接以前台模式启动。
+
 前台模式的取舍：
 
 - 必须保持那个 Terminal 窗口一直开着，关掉窗口 bridge 就会停止。
@@ -251,6 +265,7 @@ CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
 CTI_DEFAULT_WORKDIR=/Users/yourname/project
 CTI_DEFAULT_MODE=code
+CTI_RUN_MODE=foreground
 CTI_PERMISSION_POLICY=smart
 CTI_TG_BOT_TOKEN=123456:your_bot_token
 CTI_TG_CHAT_ID=123456789

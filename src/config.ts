@@ -9,6 +9,7 @@ export interface Config {
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
+  runMode: 'background' | 'foreground';
   permissionPolicy: PermissionPolicy;
   codexNetworkAccess: boolean;
   codexSandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access';
@@ -86,6 +87,7 @@ export function loadConfig(): Config {
     defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
+    runMode: env.get("CTI_RUN_MODE") === "foreground" ? "foreground" : "background",
     permissionPolicy: normalizePermissionPolicy(
       env.get("CTI_PERMISSION_POLICY"),
       env.get("CTI_AUTO_APPROVE") === "true",
@@ -124,6 +126,7 @@ export function saveConfig(config: Config): void {
   out += formatEnvLine("CTI_DEFAULT_WORKDIR", config.defaultWorkDir);
   if (config.defaultModel) out += formatEnvLine("CTI_DEFAULT_MODEL", config.defaultModel);
   out += formatEnvLine("CTI_DEFAULT_MODE", config.defaultMode);
+  out += formatEnvLine("CTI_RUN_MODE", config.runMode);
   out += formatEnvLine("CTI_PERMISSION_POLICY", config.permissionPolicy);
   out += formatEnvLine("CTI_CODEX_NETWORK_ACCESS", String(config.codexNetworkAccess));
   out += formatEnvLine("CTI_CODEX_SANDBOX_MODE", config.codexSandboxMode);

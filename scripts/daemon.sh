@@ -17,6 +17,13 @@ foreground_requested() {
   esac
 }
 
+configured_run_mode() {
+  case "${CTI_RUN_MODE:-background}" in
+    foreground) echo "foreground" ;;
+    *) echo "background" ;;
+  esac
+}
+
 ensure_built() {
   local need_build=0
   if [ ! -f "$SKILL_DIR/dist/daemon.mjs" ]; then
@@ -149,7 +156,7 @@ case "${1:-help}" in
     # and other CTI_* flags are available when clean_env checks them.
     [ -f "$CTI_HOME/config.env" ] && set -a && source "$CTI_HOME/config.env" && set +a
 
-    if foreground_requested "$@"; then
+    if foreground_requested "$@" || [ "$(configured_run_mode)" = "foreground" ]; then
       if supervisor_is_running; then
         echo "Stopping existing bridge before foreground start..."
         if supervisor_is_managed; then

@@ -83,6 +83,12 @@ Inside Codex:
 claude-to-im start
 ```
 
+If you want plain `start` to run in the current foreground Terminal session instead of a background supervisor, add this to `~/.claude-to-im/config.env`:
+
+```env
+CTI_RUN_MODE=foreground
+```
+
 ### Codex-Specific Notes
 
 - Set `CTI_RUNTIME=codex` to force Codex
@@ -209,6 +215,14 @@ bash scripts/daemon.sh start --foreground
 
 This is especially useful on macOS when you want Telegram-driven Codex sessions to inherit the same front-session browser / AppleScript capabilities as a terminal-started Codex session.
 
+If you do not want to remember `--foreground`, set this in `~/.claude-to-im/config.env`:
+
+```env
+CTI_RUN_MODE=foreground
+```
+
+Then ordinary `claude-to-im start` or `bash scripts/daemon.sh start` will also launch in foreground mode.
+
 Foreground mode tradeoffs:
 
 - Keep that Terminal window open; closing it stops the bridge.
@@ -251,6 +265,7 @@ CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
 CTI_DEFAULT_WORKDIR=/Users/yourname/project
 CTI_DEFAULT_MODE=code
+CTI_RUN_MODE=foreground
 CTI_PERMISSION_POLICY=smart
 CTI_TG_BOT_TOKEN=123456:your_bot_token
 CTI_TG_CHAT_ID=123456789

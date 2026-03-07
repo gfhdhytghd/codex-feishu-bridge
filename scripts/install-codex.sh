@@ -36,9 +36,11 @@ if [ -e "$TARGET_DIR" ]; then
 fi
 
 if [ "${1:-}" = "--link" ]; then
+  LINK_MODE=true
   ln -s "$SOURCE_DIR" "$TARGET_DIR"
   echo "Symlinked: $TARGET_DIR → $SOURCE_DIR"
 else
+  LINK_MODE=false
   cp -R "$SOURCE_DIR" "$TARGET_DIR"
   echo "Copied to: $TARGET_DIR"
 fi
@@ -55,9 +57,13 @@ if [ ! -f "$TARGET_DIR/dist/daemon.mjs" ]; then
   (cd "$TARGET_DIR" && npm run build)
 fi
 
-# Prune devDependencies after build
-echo "Pruning dev dependencies..."
-(cd "$TARGET_DIR" && npm prune --production)
+# Prune devDependencies after build for copied installs only.
+if [ "$LINK_MODE" = "true" ]; then
+  echo "Skipping npm prune for symlink install to avoid mutating the source workspace."
+else
+  echo "Pruning dev dependencies..."
+  (cd "$TARGET_DIR" && npm prune --production)
+fi
 
 echo ""
 echo "Done! Start a new Codex session and use:"
