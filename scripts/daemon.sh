@@ -10,6 +10,13 @@ LOG_FILE="$CTI_HOME/logs/bridge.log"
 
 ensure_dirs() { mkdir -p "$CTI_HOME"/{data,logs,runtime,data/messages}; }
 
+foreground_requested() {
+  case "${2:-}" in
+    --foreground|-f) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_built() {
   local need_build=0
   if [ ! -f "$SKILL_DIR/dist/daemon.mjs" ]; then
@@ -96,6 +103,22 @@ show_failure_help() {
   echo "  3. Rebuild bundle:   cd \"$SKILL_DIR\" && npm run build"
 }
 
+run_foreground() {
+  local node_path
+  node_path=$(command -v node)
+  mkdir -p "$(dirname "$LOG_FILE")"
+  touch "$LOG_FILE"
+
+  echo "Starting bridge in foreground..."
+  echo "  Logs: $LOG_FILE"
+  echo "  Press Ctrl-C to stop."
+
+  (
+    cd "$SKILL_DIR"
+    "$node_path" "$SKILL_DIR/dist/daemon.mjs" 2>&1
+  ) | tee -a "$LOG_FILE"
+}
+
 # ── Load platform-specific supervisor ──
 
 case "$(uname -s)" in
@@ -122,6 +145,33 @@ case "${1:-help}" in
     ensure_dirs
     ensure_built
 
+    # Source config.env BEFORE clean_env so that CTI_ANTHROPIC_PASSTHROUGH
+    # and other CTI_* flags are available when clean_env checks them.
+    [ -f "$CTI_HOME/config.env" ] && set -a && source "$CTI_HOME/config.env" && set +a
+
+    if foreground_requested "$@"; then
+      if supervisor_is_running; then
+        echo "Stopping existing bridge before foreground start..."
+        if supervisor_is_managed; then
+          supervisor_stop
+        else
+          PID=$(read_pid)
+          if pid_alive "$PID"; then
+            kill "$PID"
+          fi
+          rm -f "$PID_FILE"
+        fi
+        sleep 1
+      fi
+      clean_env
+      if supervisor_is_managed; then
+        launchctl bootout "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null || true
+      fi
+      rm -f "$PID_FILE"
+      run_foreground
+      exit $?
+    fi
+
     # Check if already running (supervisor-aware: launchctl on macOS, PID on Linux)
     if supervisor_is_running; then
       EXISTING_PID=$(read_pid)
@@ -129,10 +179,6 @@ case "${1:-help}" in
       cat "$STATUS_FILE" 2>/dev/null
       exit 1
     fi
-
-    # Source config.env BEFORE clean_env so that CTI_ANTHROPIC_PASSTHROUGH
-    # and other CTI_* flags are available when clean_env checks them.
-    [ -f "$CTI_HOME/config.env" ] && set -a && source "$CTI_HOME/config.env" && set +a
 
     clean_env
     echo "Starting bridge..."
@@ -164,6 +210,29 @@ case "${1:-help}" in
       show_failure_help
       exit 1
     fi
+    ;;
+
+  foreground)
+    ensure_dirs
+    ensure_built
+
+    if supervisor_is_running; then
+      echo "Stopping existing bridge before foreground start..."
+      if supervisor_is_managed; then
+        supervisor_stop
+      else
+        PID=$(read_pid)
+        if pid_alive "$PID"; then
+          kill "$PID"
+        fi
+        rm -f "$PID_FILE"
+      fi
+      sleep 1
+    fi
+
+    [ -f "$CTI_HOME/config.env" ] && set -a && source "$CTI_HOME/config.env" && set +a
+    clean_env
+    run_foreground
     ;;
 
   stop)
@@ -217,6 +286,6 @@ case "${1:-help}" in
     ;;
 
   *)
-    echo "Usage: daemon.sh {start|stop|status|logs [N]}"
+    echo "Usage: daemon.sh {start [--foreground]|foreground|stop|status|logs [N]}"
     ;;
 esac

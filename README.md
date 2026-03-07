@@ -86,9 +86,18 @@ claude-to-im start
 ### Codex-Specific Notes
 
 - Set `CTI_RUNTIME=codex` to force Codex
+- Codex bridge sessions enable network access by default; set `CTI_CODEX_NETWORK_ACCESS=false` if you need offline-only behavior
+- Codex bridge sessions default to `CTI_CODEX_SANDBOX_MODE=danger-full-access` in this fork so browser / AppleScript / desktop automation can behave much closer to a terminal-started Codex session on a trusted personal machine
 - The bridge skips the Git trust check for IM-managed Codex sessions
 - On macOS, launchd automatically forwards custom provider secrets declared as `env_key` in `~/.codex/config.toml`
 - This means third-party Codex API providers can usually be reused without duplicating credentials in the bridge config
+
+### Risk Notes For Codex Runtime
+
+- This fork intentionally favors convenience on a trusted personal machine over strict isolation.
+- `CTI_CODEX_SANDBOX_MODE=danger-full-access` gives Telegram-driven Codex sessions broad access to local files, GUI automation entrypoints, browsers, and system commands.
+- Codex runtime is backed by non-interactive `codex exec`, not the full interactive TUI. As a result, IM-side per-tool approval prompts are limited and should not be treated as a guaranteed security boundary.
+- If you need a safer setup, lower `CTI_CODEX_SANDBOX_MODE` to `workspace-write` or `read-only`, and avoid exposing the bot beyond your own account.
 
 ## For Claude Code Users
 
@@ -137,6 +146,40 @@ After setup and start:
 2. The daemon creates or resumes an agent session
 3. Responses, tool calls, and permission prompts return to chat
 
+## Tool Approval Policy
+
+Configure `CTI_PERMISSION_POLICY` in `~/.claude-to-im/config.env`:
+
+- `always`: every tool call requires IM approval. This is the default and preserves the old behavior.
+- `smart`: the bridge auto-approves low-risk actions and asks for approval only when the tool or operation looks sensitive.
+- `never`: auto-approve every tool call. Use only in tightly controlled environments.
+
+`CTI_AUTO_APPROVE=true` is still supported as a legacy alias for `CTI_PERMISSION_POLICY=never`.
+
+Example:
+
+```env
+CTI_PERMISSION_POLICY=smart
+```
+
+### Smart policy rules
+
+In `smart` mode, the bridge currently applies these rules:
+
+- Auto-approve read-only tools such as `Read`, `Grep`, `Glob`, and `LS`
+- Auto-approve file edits only when every target stays inside `CTI_DEFAULT_WORKDIR` and avoids sensitive paths such as `~/.ssh`, `~/.codex`, `~/.claude`, `~/.aws`, `/etc`, and shell profile / secret files
+- Auto-approve low-risk shell inspection commands such as `pwd`, `ls`, `rg`, `git status`, `git diff`, and common local test/build checks
+- Auto-approve read-only network fetches when they look like plain `GET` / `HEAD` reads without request bodies, local file uploads, or explicit credentials
+- Auto-approve network calls that post back to the connected IM platform (for example Telegram / Discord / Feishu delivery APIs), unless they include obvious local file upload payloads
+- Require approval for shell commands that can mutate files, change permissions, control the OS, access protected macOS state, install software, upload local data, send authenticated requests to external services, or change Git remote/repository state
+- Auto-approve IM-delivery MCP tools and obviously read-like MCP tools (for example `get`, `list`, `search`, `query`); require approval for other write-capable or unknown external-state MCP tools
+- Require approval for `WebFetch` only when it includes request bodies, credentials, cookies, custom headers, or non-read-only methods
+
+### Runtime note
+
+- Claude runtime supports the full `smart` policy with per-tool decisions in chat.
+- Codex runtime currently only exposes thread-level approval policy in the SDK. In that runtime, `smart` falls back to conservative approval prompts instead of selective auto-approval.
+
 ## Commands
 
 Use these commands inside Codex or Claude Code:
@@ -151,6 +194,26 @@ Use these commands inside Codex or Claude Code:
 | `claude-to-im logs 200` | Tail more logs |
 | `claude-to-im reconfigure` | Update existing config |
 | `claude-to-im doctor` | Run diagnostics |
+
+For users who want the bridge to run in the current login session instead of a background supervisor, use:
+
+```bash
+bash scripts/daemon.sh foreground
+```
+
+or:
+
+```bash
+bash scripts/daemon.sh start --foreground
+```
+
+This is especially useful on macOS when you want Telegram-driven Codex sessions to inherit the same front-session browser / AppleScript capabilities as a terminal-started Codex session.
+
+Foreground mode tradeoffs:
+
+- Keep that Terminal window open; closing it stops the bridge.
+- Foreground mode inherits the current desktop/login session more directly, which can improve Chrome / AppleScript behavior.
+- Foreground mode is also more powerful and less isolated than a background supervisor flow, so only use it on a trusted machine.
 
 Claude Code users can also use slash-command form:
 
@@ -188,6 +251,7 @@ CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
 CTI_DEFAULT_WORKDIR=/Users/yourname/project
 CTI_DEFAULT_MODE=code
+CTI_PERMISSION_POLICY=smart
 CTI_TG_BOT_TOKEN=123456:your_bot_token
 CTI_TG_CHAT_ID=123456789
 ```

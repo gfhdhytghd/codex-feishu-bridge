@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { normalizePermissionPolicy, type PermissionPolicy } from "./permission-policy.js";
 
 export interface Config {
   runtime: 'claude' | 'codex' | 'auto';
@@ -8,6 +9,9 @@ export interface Config {
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
+  permissionPolicy: PermissionPolicy;
+  codexNetworkAccess: boolean;
+  codexSandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access';
   // Telegram
   tgBotToken?: string;
   tgChatId?: string;
@@ -69,6 +73,12 @@ export function loadConfig(): Config {
 
   const rawRuntime = env.get("CTI_RUNTIME") || "claude";
   const runtime = (["claude", "codex", "auto"].includes(rawRuntime) ? rawRuntime : "claude") as Config["runtime"];
+  const rawCodexSandboxMode = env.get("CTI_CODEX_SANDBOX_MODE") || "danger-full-access";
+  const codexSandboxMode = (
+    ["read-only", "workspace-write", "danger-full-access"].includes(rawCodexSandboxMode)
+      ? rawCodexSandboxMode
+      : "danger-full-access"
+  ) as Config["codexSandboxMode"];
 
   return {
     runtime,
@@ -76,6 +86,12 @@ export function loadConfig(): Config {
     defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
+    permissionPolicy: normalizePermissionPolicy(
+      env.get("CTI_PERMISSION_POLICY"),
+      env.get("CTI_AUTO_APPROVE") === "true",
+    ),
+    codexNetworkAccess: env.get("CTI_CODEX_NETWORK_ACCESS") !== "false",
+    codexSandboxMode,
     tgBotToken: env.get("CTI_TG_BOT_TOKEN") || undefined,
     tgChatId: env.get("CTI_TG_CHAT_ID") || undefined,
     tgAllowedUsers: splitCsv(env.get("CTI_TG_ALLOWED_USERS")),
@@ -108,6 +124,9 @@ export function saveConfig(config: Config): void {
   out += formatEnvLine("CTI_DEFAULT_WORKDIR", config.defaultWorkDir);
   if (config.defaultModel) out += formatEnvLine("CTI_DEFAULT_MODEL", config.defaultModel);
   out += formatEnvLine("CTI_DEFAULT_MODE", config.defaultMode);
+  out += formatEnvLine("CTI_PERMISSION_POLICY", config.permissionPolicy);
+  out += formatEnvLine("CTI_CODEX_NETWORK_ACCESS", String(config.codexNetworkAccess));
+  out += formatEnvLine("CTI_CODEX_SANDBOX_MODE", config.codexSandboxMode);
   out += formatEnvLine("CTI_TG_BOT_TOKEN", config.tgBotToken);
   out += formatEnvLine("CTI_TG_CHAT_ID", config.tgChatId);
   out += formatEnvLine(

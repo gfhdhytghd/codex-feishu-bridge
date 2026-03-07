@@ -8,12 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { initBridgeContext } from 'claude-to-im/src/lib/bridge/context.js';
-import * as bridgeManager from 'claude-to-im/src/lib/bridge/bridge-manager.js';
+import { initBridgeContext } from './vendor/bridge-context.js';
+import * as bridgeManager from './vendor/bridge-manager.js';
 // Side-effect import to trigger adapter self-registration
-import 'claude-to-im/src/lib/bridge/adapters/index.js';
+import './vendor/bridge-adapters.js';
 
-import type { LLMProvider } from 'claude-to-im/src/lib/bridge/host.js';
+import type { LLMProvider } from './vendor/bridge-host.js';
 import { loadConfig, configToSettings, CTI_HOME } from './config.js';
 import type { Config } from './config.js';
 import { JsonFileStore } from './store.js';
@@ -36,18 +36,28 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
 
   if (runtime === 'codex') {
     const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(pendingPerms);
+    return new CodexProvider(
+      pendingPerms,
+      config.permissionPolicy,
+      config.codexNetworkAccess,
+      config.codexSandboxMode,
+    );
   }
 
   if (runtime === 'auto') {
     const cliPath = resolveClaudeCliPath();
     if (cliPath) {
       console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath}`);
-      return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+      return new SDKLLMProvider(pendingPerms, cliPath, config.permissionPolicy);
     }
     console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Codex');
     const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(pendingPerms);
+    return new CodexProvider(
+      pendingPerms,
+      config.permissionPolicy,
+      config.codexNetworkAccess,
+      config.codexSandboxMode,
+    );
   }
 
   // Default: claude
@@ -62,7 +72,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     process.exit(1);
   }
   console.log(`[claude-to-im] Using Claude CLI: ${cliPath}`);
-  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+  return new SDKLLMProvider(pendingPerms, cliPath, config.permissionPolicy);
 }
 
 interface StatusInfo {
@@ -97,6 +107,18 @@ async function main(): Promise<void> {
   const pendingPerms = new PendingPermissions();
   const llm = await resolveProvider(config, pendingPerms);
   console.log(`[claude-to-im] Runtime: ${config.runtime}`);
+  if (config.runtime === 'codex') {
+    if (config.codexSandboxMode === 'danger-full-access') {
+      console.warn(
+        '[claude-to-im] WARNING: Codex runtime is using danger-full-access. Model-generated commands can access the local machine with minimal sandboxing.',
+      );
+    }
+    if (config.permissionPolicy !== 'never') {
+      console.warn(
+        '[claude-to-im] WARNING: Codex runtime uses non-interactive codex exec under the hood. Per-tool IM approval prompts are limited and may not appear for every command.',
+      );
+    }
+  }
 
   const gateway = {
     resolvePendingPermission: (id: string, resolution: { behavior: 'allow' | 'deny'; message?: string }) =>

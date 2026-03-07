@@ -86,9 +86,18 @@ claude-to-im start
 ### Codex 用户说明
 
 - `CTI_RUNTIME=codex` 表示强制使用 Codex
+- Codex 桥接会话默认开启网络访问；如果你希望 Codex 运行时完全离线，可设置 `CTI_CODEX_NETWORK_ACCESS=false`
+- 这个分支里的 Codex 桥接会话默认使用 `CTI_CODEX_SANDBOX_MODE=danger-full-access`，这样在可信个人机器上更接近你手动在终端里启动 Codex 时的浏览器 / AppleScript / 桌面自动化能力
 - IM 发起的 Codex 会话默认跳过 Git 仓库信任检查
 - macOS 下，launchd 会自动转发 `~/.codex/config.toml` 里 `env_key` 指向的第三方 Provider 密钥
 - 这意味着你现有的 Codex 第三方 API 配置通常可以直接复用
+
+### Codex 运行时风险说明
+
+- 这个分支明确偏向“可信个人机器上的易用性”，不是偏向最强隔离。
+- `CTI_CODEX_SANDBOX_MODE=danger-full-access` 会让 Telegram 驱动的 Codex 会话拥有较强的本机文件、浏览器、AppleScript 和系统命令访问能力。
+- Codex 运行时底层使用的是非交互式 `codex exec`，不是完整交互式 TUI，因此 IM 侧逐工具审批提示并不能被当作稳定可靠的安全边界。
+- 如果你更看重安全性，请把 `CTI_CODEX_SANDBOX_MODE` 改成 `workspace-write` 或 `read-only`，并且不要把机器人暴露给你自己之外的账号。
 
 ## 给 Claude Code 用户
 
@@ -137,6 +146,40 @@ config.env.example
 2. 守护进程会创建或恢复代理会话
 3. 响应内容、工具调用和权限确认会回到聊天里
 
+## 工具审批策略
+
+在 `~/.claude-to-im/config.env` 里配置 `CTI_PERMISSION_POLICY`：
+
+- `always`：每次工具调用都需要 IM 审批。这是默认值，兼容旧行为。
+- `smart`：桥接会自动放行低风险操作，只在工具或操作看起来敏感时才请求审批。
+- `never`：所有工具调用都自动放行。只建议在强信任、强隔离环境里使用。
+
+旧配置里的 `CTI_AUTO_APPROVE=true` 仍然可用，它等价于 `CTI_PERMISSION_POLICY=never`。
+
+示例：
+
+```env
+CTI_PERMISSION_POLICY=smart
+```
+
+### `smart` 模式规则
+
+当前内置规则如下：
+
+- 自动放行只读工具，例如 `Read`、`Grep`、`Glob`、`LS`
+- 只有在目标文件都位于 `CTI_DEFAULT_WORKDIR` 内、且不涉及 `~/.ssh`、`~/.codex`、`~/.claude`、`~/.aws`、`/etc`、shell 配置文件、密钥文件等敏感路径时，才自动放行文件编辑
+- 自动放行低风险 shell 查看类命令，例如 `pwd`、`ls`、`rg`、`git status`、`git diff` 和常见本地 test/build 检查命令
+- 对明显只是只读抓取的网络请求自动放行，例如不带请求体、不上传本地文件、不携带显式鉴权信息的 `GET` / `HEAD` 请求
+- 对发往已接入 IM 平台本身的网络回发自动放行，例如 Telegram / Discord / 飞书消息回传接口；但如果包含明显的本地文件上传，仍会要求审批
+- 对会修改文件、调整权限、控制系统、访问受保护 macOS 状态、安装软件、上传本地数据、向外部服务发送带鉴权请求、修改 Git 仓库或远端状态的 shell 命令，强制要求审批
+- 对 IM 回发类 MCP 工具和明显只读的 MCP 工具自动放行；其他会改外部状态或用途不明确的 MCP 工具要求审批
+- 对 `WebFetch` 只有在带请求体、Cookie、认证信息、自定义请求头或非只读方法时才要求审批
+
+### 运行时说明
+
+- Claude 运行时支持完整的 `smart` 细粒度审批，会按具体工具调用决定是否在 IM 中打断审批。
+- Codex 运行时当前在 SDK 里只有会话级审批能力，没有逐工具回调。因此 `smart` 在 Codex 运行时会退化成更保守的审批提示，而不是选择性自动放行。
+
 ## 命令
 
 在 Codex 或 Claude Code 中可使用：
@@ -151,6 +194,26 @@ config.env.example
 | `claude-to-im logs 200` | 查看更多日志 |
 | `claude-to-im reconfigure` | 修改已有配置 |
 | `claude-to-im doctor` | 运行诊断 |
+
+如果你希望桥接运行在当前登录前台会话里，而不是后台 supervisor，可使用：
+
+```bash
+bash scripts/daemon.sh foreground
+```
+
+或者：
+
+```bash
+bash scripts/daemon.sh start --foreground
+```
+
+这在 macOS 上尤其有用，因为 Telegram 驱动的 Codex 会话会更接近你手动在终端里启动 Codex 时的浏览器 / AppleScript / 前台桌面上下文能力。
+
+前台模式的取舍：
+
+- 必须保持那个 Terminal 窗口一直开着，关掉窗口 bridge 就会停止。
+- 前台模式会更直接继承当前桌面登录会话，通常更有利于 Chrome / AppleScript 这类能力正常工作。
+- 但前台模式也意味着能力更强、隔离更弱，因此只适合在可信机器上使用。
 
 Claude Code 用户也可以使用 slash command 形式：
 
@@ -188,6 +251,7 @@ CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
 CTI_DEFAULT_WORKDIR=/Users/yourname/project
 CTI_DEFAULT_MODE=code
+CTI_PERMISSION_POLICY=smart
 CTI_TG_BOT_TOKEN=123456:your_bot_token
 CTI_TG_CHAT_ID=123456789
 ```

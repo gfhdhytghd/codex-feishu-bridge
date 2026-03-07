@@ -289,6 +289,8 @@ describe('CodexProvider', () => {
     assert.ok(capturedStartOptions, 'startThread options should be captured');
     assert.ok(!Object.prototype.hasOwnProperty.call(capturedStartOptions!, 'model'), 'Model should not be forwarded by default');
     assert.equal(capturedStartOptions?.skipGitRepoCheck, true, 'Should skip Git repo trust checks for bridge-managed sessions');
+    assert.equal(capturedStartOptions?.networkAccessEnabled, true, 'Should enable network access for bridge-managed Codex sessions by default');
+    assert.equal(capturedStartOptions?.sandboxMode, 'danger-full-access', 'Should use a fully-capable Codex sandbox by default');
   });
 
   it('passes model only when CTI_CODEX_PASS_MODEL=true', async () => {
@@ -330,6 +332,37 @@ describe('CodexProvider', () => {
         process.env.CTI_CODEX_PASS_MODEL = old;
       }
     }
+  });
+
+  it('can disable network access explicitly', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions(), 'always', false, 'workspace-write');
+
+    let capturedStartOptions: Record<string, unknown> | undefined;
+    const mockThread = {
+      runStreamed: () => ({
+        events: (async function* () {
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+        })(),
+      }),
+    };
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      startThread: (opts: Record<string, unknown>) => {
+        capturedStartOptions = opts;
+        return mockThread;
+      },
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'hello',
+      sessionId: 'network-off-session',
+    });
+    await collectStream(stream);
+
+    assert.equal(capturedStartOptions?.networkAccessEnabled, false);
+    assert.equal(capturedStartOptions?.sandboxMode, 'workspace-write');
   });
 
   it('retries with fresh thread when resume fails before any events', async () => {

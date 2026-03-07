@@ -14,8 +14,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { LLMProvider, StreamChatParams } from 'claude-to-im/src/lib/bridge/host.js';
+import type { LLMProvider, StreamChatParams } from './vendor/bridge-host.js';
 import type { PendingPermissions } from './permission-gateway.js';
+import { approvalPolicyForCodex, type PermissionPolicy } from './permission-policy.js';
 import { sseEvent } from './sse-utils.js';
 
 /** MIME → file extension for temp image files. */
@@ -36,18 +37,13 @@ type CodexInstance = any;
 type ThreadInstance = any;
 
 /**
- * Map bridge permission modes to Codex approval policies.
- * - 'acceptEdits' (code mode) → 'on-failure' (auto-approve most things)
- * - 'plan' → 'on-request' (ask before executing)
- * - 'default' (ask mode) → 'on-request'
+ * Codex SDK currently exposes approval only at the thread level, not per tool
+ * call. For `smart` bridge policy we therefore fall back to `on-request` so
+ * sensitive operations still require approval, even though low-risk tool calls
+ * cannot be auto-approved selectively in Codex runtime yet.
  */
-function toApprovalPolicy(permissionMode?: string): string {
-  switch (permissionMode) {
-    case 'acceptEdits': return 'on-failure';
-    case 'plan': return 'on-request';
-    case 'default': return 'on-request';
-    default: return 'on-request';
-  }
+function toApprovalPolicy(permissionPolicy: PermissionPolicy): string {
+  return approvalPolicyForCodex(permissionPolicy);
 }
 
 /** Whether to forward bridge model to Codex CLI. Default: false (use Codex current/default model). */
@@ -71,11 +67,17 @@ function shouldRetryFreshThread(message: string): boolean {
 export class CodexProvider implements LLMProvider {
   private sdk: CodexModule | null = null;
   private codex: CodexInstance | null = null;
+  private warnedSmartPolicyFallback = false;
 
   /** Maps session IDs to Codex thread IDs for resume. */
   private threadIds = new Map<string, string>();
 
-  constructor(private pendingPerms: PendingPermissions) {}
+  constructor(
+    private pendingPerms: PendingPermissions,
+    private permissionPolicy: PermissionPolicy = 'always',
+    private networkAccessEnabled = true,
+    private sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access' = 'danger-full-access',
+  ) {}
 
   /**
    * Lazily load the Codex SDK. Throws a clear error if not installed.
@@ -119,6 +121,12 @@ export class CodexProvider implements LLMProvider {
           const tempFiles: string[] = [];
           try {
             const { codex } = await self.ensureSDK();
+            if (self.permissionPolicy === 'smart' && !self.warnedSmartPolicyFallback) {
+              self.warnedSmartPolicyFallback = true;
+              console.warn(
+                '[codex-provider] CTI_PERMISSION_POLICY=smart falls back to thread-level approvals in Codex runtime; low-risk tool calls are not auto-approved selectively.',
+              );
+            }
 
             // Resolve or create thread
             let savedThreadId = params.sdkSessionId
@@ -133,13 +141,15 @@ export class CodexProvider implements LLMProvider {
               savedThreadId = undefined;
             }
 
-            const approvalPolicy = toApprovalPolicy(params.permissionMode);
+            const approvalPolicy = toApprovalPolicy(self.permissionPolicy);
             const passModel = shouldPassModelToCodex();
 
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
               approvalPolicy,
+              networkAccessEnabled: self.networkAccessEnabled,
+              sandboxMode: self.sandboxMode,
               // Bridge sessions often start in a user-selected directory that is
               // not a Git repo. Skip the trusted-repo gate for this host-managed flow.
               skipGitRepoCheck: true,

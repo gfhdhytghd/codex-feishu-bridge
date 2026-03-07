@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { maskSecret, configToSettings, type Config } from '../config.js';
+import { normalizePermissionPolicy } from '../permission-policy.js';
 
 // ── maskSecret ──
 
@@ -32,6 +33,9 @@ describe('configToSettings', () => {
     enabledChannels: [],
     defaultWorkDir: '/tmp/test',
     defaultMode: 'code',
+    permissionPolicy: 'always',
+    codexNetworkAccess: true,
+    codexSandboxMode: 'danger-full-access',
   };
 
   it('always sets remote_bridge_enabled to true', () => {
@@ -140,9 +144,29 @@ describe('loadConfig/saveConfig round-trip', () => {
       enabledChannels: [],
       defaultWorkDir: process.cwd(),
       defaultMode: 'code',
+      permissionPolicy: 'always',
+      codexNetworkAccess: true,
+      codexSandboxMode: 'danger-full-access',
     });
     assert.equal(m.get('bridge_telegram_enabled'), 'false');
     assert.equal(m.get('bridge_discord_enabled'), 'false');
     assert.equal(m.get('bridge_feishu_enabled'), 'false');
+  });
+});
+
+describe('normalizePermissionPolicy', () => {
+  it('accepts explicit policy values', () => {
+    assert.equal(normalizePermissionPolicy('always'), 'always');
+    assert.equal(normalizePermissionPolicy('smart'), 'smart');
+    assert.equal(normalizePermissionPolicy('never'), 'never');
+  });
+
+  it('maps legacy auto-approve to never', () => {
+    assert.equal(normalizePermissionPolicy(undefined, true), 'never');
+  });
+
+  it('defaults to always for backward compatibility', () => {
+    assert.equal(normalizePermissionPolicy(undefined, false), 'always');
+    assert.equal(normalizePermissionPolicy('invalid', false), 'always');
   });
 });

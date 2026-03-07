@@ -9,8 +9,9 @@ import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
-import type { LLMProvider, StreamChatParams, FileAttachment } from 'claude-to-im/src/lib/bridge/host.js';
+import type { LLMProvider, StreamChatParams, FileAttachment } from './vendor/bridge-host.js';
 import type { PendingPermissions } from './permission-gateway.js';
+import { decidePermission, type PermissionPolicy } from './permission-policy.js';
 
 import { sseEvent } from './sse-utils.js';
 
@@ -175,17 +176,17 @@ function buildPrompt(
 
 export class SDKLLMProvider implements LLMProvider {
   private cliPath: string | undefined;
-  private autoApprove: boolean;
+  private permissionPolicy: PermissionPolicy;
 
-  constructor(private pendingPerms: PendingPermissions, cliPath?: string, autoApprove = false) {
+  constructor(private pendingPerms: PendingPermissions, cliPath?: string, permissionPolicy: PermissionPolicy = 'always') {
     this.cliPath = cliPath;
-    this.autoApprove = autoApprove;
+    this.permissionPolicy = permissionPolicy;
   }
 
   streamChat(params: StreamChatParams): ReadableStream<string> {
     const pendingPerms = this.pendingPerms;
     const cliPath = this.cliPath;
-    const autoApprove = this.autoApprove;
+    const permissionPolicy = this.permissionPolicy;
 
     return new ReadableStream({
       start(controller) {
@@ -206,23 +207,28 @@ export class SDKLLMProvider implements LLMProvider {
                   input: Record<string, unknown>,
                   opts: { toolUseID: string; suggestions?: string[] },
                 ): Promise<PermissionResult> => {
-                  // Auto-approve if configured (useful for channels without
-                  // interactive permission UI, e.g. Feishu WebSocket mode)
-                  if (autoApprove) {
+                  const decision = decidePermission({
+                    policy: permissionPolicy,
+                    toolName,
+                    input,
+                    workingDirectory: params.workingDirectory,
+                  });
+
+                  if (decision.behavior === 'allow') {
                     return { behavior: 'allow' as const, updatedInput: input };
                   }
 
-                  // Emit permission_request SSE event for the bridge
                   controller.enqueue(
                     sseEvent('permission_request', {
                       permissionRequestId: opts.toolUseID,
                       toolName,
                       toolInput: input,
                       suggestions: opts.suggestions || [],
+                      permissionPolicy,
+                      reason: decision.reason,
                     }),
                   );
 
-                  // Block until IM user responds
                   const result = await pendingPerms.waitFor(opts.toolUseID);
 
                   if (result.behavior === 'allow') {
