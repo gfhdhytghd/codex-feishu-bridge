@@ -4,6 +4,8 @@
 
 [English](README.md)
 
+> 本仓库派生自 [op7418/Claude-to-IM-skill](https://github.com/op7418/Claude-to-IM-skill)，原项目采用 MIT License 发布。这里保留了原始 MIT 许可证声明，并补充了便于直接复用的打包、文档和兼容性修改。
+
 这个仓库包含完整可发布的 Skill 内容：
 
 - `SKILL.md` 技能定义
@@ -11,6 +13,14 @@
 - `scripts/` 平台脚本
 - `references/` 配置与排障说明
 - 测试、构建配置和安装脚本
+
+## 上游来源与许可证
+
+原始上游项目：
+
+- [op7418/Claude-to-IM-skill](https://github.com/op7418/Claude-to-IM-skill)
+
+本仓库是在该 MIT 项目的基础上进行再分发和修改。原始版权声明和许可证文本保留在 [LICENSE](LICENSE) 中，同时补充了本仓库修改部分的版权声明。
 
 ## 这个 Skill 能做什么
 

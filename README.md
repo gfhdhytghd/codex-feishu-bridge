@@ -4,6 +4,8 @@ Bridge Codex or Claude Code to Telegram, Discord, and Feishu/Lark so you can cha
 
 [中文说明](README_CN.md)
 
+> Derived from [op7418/Claude-to-IM-skill](https://github.com/op7418/Claude-to-IM-skill), published under the MIT License. This repository keeps the original MIT license notice and adds packaging, documentation, and compatibility updates for direct reuse.
+
 This repository contains the full publishable skill package:
 
 - `SKILL.md` for agent discovery
@@ -11,6 +13,14 @@ This repository contains the full publishable skill package:
 - platform scripts in `scripts/`
 - setup references in `references/`
 - tests and build config
+
+## Upstream and License
+
+Original upstream project:
+
+- [op7418/Claude-to-IM-skill](https://github.com/op7418/Claude-to-IM-skill)
+
+This repository is a redistribution and modification of that MIT-licensed project. The original copyright notice and license text are preserved in [LICENSE](LICENSE), with an additional modification copyright notice for this repository.
 
 ## What It Does
 
