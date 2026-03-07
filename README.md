@@ -104,6 +104,7 @@ CTI_RUN_MODE=foreground
 - This fork intentionally favors convenience on a trusted personal machine over strict isolation.
 - `CTI_CODEX_SANDBOX_MODE=danger-full-access` gives Telegram-driven Codex sessions broad access to local files, GUI automation entrypoints, browsers, and system commands.
 - Codex runtime is backed by non-interactive `codex exec`, not the full interactive TUI. As a result, IM-side per-tool approval prompts are limited and should not be treated as a guaranteed security boundary.
+- Startup notifications can include hostnames, usernames, workdirs, and other local runtime metadata in IM chats. Only enable the bridge for chats and channels you trust.
 - If you need a safer setup, lower `CTI_CODEX_SANDBOX_MODE` to `workspace-write` or `read-only`, and avoid exposing the bot beyond your own account.
 
 ## For Claude Code Users
@@ -152,6 +153,16 @@ After setup and start:
 1. Send a message to your Telegram, Discord, or Feishu bot
 2. The daemon creates or resumes an agent session
 3. Responses, tool calls, and permission prompts return to chat
+
+On startup, the bridge also tries to push a short status message to already-known IM targets when possible. The message includes connection status, device/host info, runtime (`Claude Code` or `Codex`), model label, run mode, channels, PID, run ID, and workdir so you can quickly verify which machine and session came online.
+
+Current startup notification targets are:
+
+- existing active channel bindings
+- Telegram `CTI_TG_CHAT_ID` when configured
+- Discord `CTI_DISCORD_ALLOWED_CHANNELS` when configured
+
+If a platform does not yet have a reliable outbound target, the bridge skips the startup notification for that platform instead of failing startup.
 
 ## Command Aliases
 

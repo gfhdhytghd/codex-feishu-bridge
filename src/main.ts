@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 
 import { initBridgeContext } from './vendor/bridge-context.js';
 import * as bridgeManager from './vendor/bridge-manager.js';
@@ -20,6 +21,7 @@ import { JsonFileStore } from './store.js';
 import { SDKLLMProvider, resolveClaudeCliPath } from './llm-provider.js';
 import { PendingPermissions } from './permission-gateway.js';
 import { setupLogger } from './logger.js';
+import { sendStartupNotifications } from './startup-notifier.js';
 
 const RUNTIME_DIR = path.join(CTI_HOME, 'runtime');
 const STATUS_FILE = path.join(RUNTIME_DIR, 'status.json');
@@ -31,33 +33,45 @@ const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
  * - 'codex': uses @openai/codex-sdk via CodexProvider
  * - 'auto': tries Claude first, falls back to Codex
  */
-async function resolveProvider(config: Config, pendingPerms: PendingPermissions): Promise<LLMProvider> {
+async function resolveProvider(
+  config: Config,
+  pendingPerms: PendingPermissions,
+): Promise<{ provider: LLMProvider; activeRuntime: 'claude' | 'codex' }> {
   const runtime = config.runtime;
 
   if (runtime === 'codex') {
     const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(
-      pendingPerms,
-      config.permissionPolicy,
-      config.codexNetworkAccess,
-      config.codexSandboxMode,
-    );
+    return {
+      provider: new CodexProvider(
+        pendingPerms,
+        config.permissionPolicy,
+        config.codexNetworkAccess,
+        config.codexSandboxMode,
+      ),
+      activeRuntime: 'codex',
+    };
   }
 
   if (runtime === 'auto') {
     const cliPath = resolveClaudeCliPath();
     if (cliPath) {
       console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath}`);
-      return new SDKLLMProvider(pendingPerms, cliPath, config.permissionPolicy);
+      return {
+        provider: new SDKLLMProvider(pendingPerms, cliPath, config.permissionPolicy),
+        activeRuntime: 'claude',
+      };
     }
     console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Codex');
     const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(
-      pendingPerms,
-      config.permissionPolicy,
-      config.codexNetworkAccess,
-      config.codexSandboxMode,
-    );
+    return {
+      provider: new CodexProvider(
+        pendingPerms,
+        config.permissionPolicy,
+        config.codexNetworkAccess,
+        config.codexSandboxMode,
+      ),
+      activeRuntime: 'codex',
+    };
   }
 
   // Default: claude
@@ -72,7 +86,10 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     process.exit(1);
   }
   console.log(`[claude-to-im] Using Claude CLI: ${cliPath}`);
-  return new SDKLLMProvider(pendingPerms, cliPath, config.permissionPolicy);
+  return {
+    provider: new SDKLLMProvider(pendingPerms, cliPath, config.permissionPolicy),
+    activeRuntime: 'claude',
+  };
 }
 
 interface StatusInfo {
@@ -81,6 +98,10 @@ interface StatusInfo {
   runId?: string;
   startedAt?: string;
   channels?: string[];
+  runtime?: string;
+  model?: string;
+  runMode?: string;
+  host?: string;
   lastExitReason?: string;
 }
 
@@ -105,9 +126,9 @@ async function main(): Promise<void> {
   const settings = configToSettings(config);
   const store = new JsonFileStore(settings);
   const pendingPerms = new PendingPermissions();
-  const llm = await resolveProvider(config, pendingPerms);
-  console.log(`[claude-to-im] Runtime: ${config.runtime}`);
-  if (config.runtime === 'codex') {
+  const { provider: llm, activeRuntime } = await resolveProvider(config, pendingPerms);
+  console.log(`[claude-to-im] Runtime: ${activeRuntime}`);
+  if (activeRuntime === 'codex') {
     if (config.codexSandboxMode === 'danger-full-access') {
       console.warn(
         '[claude-to-im] WARNING: Codex runtime is using danger-full-access. Model-generated commands can access the local machine with minimal sandboxing.',
@@ -131,6 +152,7 @@ async function main(): Promise<void> {
     permissions: gateway,
     lifecycle: {
       onBridgeStart: () => {
+        const startedAt = new Date().toISOString();
         // Write authoritative PID from the actual process (not shell $!)
         fs.mkdirSync(RUNTIME_DIR, { recursive: true });
         fs.writeFileSync(PID_FILE, String(process.pid), 'utf-8');
@@ -138,10 +160,21 @@ async function main(): Promise<void> {
           running: true,
           pid: process.pid,
           runId,
-          startedAt: new Date().toISOString(),
+          startedAt,
           channels: config.enabledChannels,
+          runtime: activeRuntime,
+          model: config.defaultModel || 'runtime default',
+          runMode: config.runMode,
+          host: os.hostname(),
         });
         console.log(`[claude-to-im] Bridge started (PID: ${process.pid}, channels: ${config.enabledChannels.join(', ')})`);
+        void sendStartupNotifications({
+          config,
+          store,
+          runId,
+          startedAt,
+          activeRuntime,
+        });
       },
       onBridgeStop: () => {
         writeStatus({ running: false });

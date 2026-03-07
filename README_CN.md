@@ -104,6 +104,7 @@ CTI_RUN_MODE=foreground
 - 这个分支明确偏向“可信个人机器上的易用性”，不是偏向最强隔离。
 - `CTI_CODEX_SANDBOX_MODE=danger-full-access` 会让 Telegram 驱动的 Codex 会话拥有较强的本机文件、浏览器、AppleScript 和系统命令访问能力。
 - Codex 运行时底层使用的是非交互式 `codex exec`，不是完整交互式 TUI，因此 IM 侧逐工具审批提示并不能被当作稳定可靠的安全边界。
+- 启动通知会把主机名、用户名、工作目录等本机运行时信息发到 IM 聊天里，所以只应在你信任的会话或频道中启用 bridge。
 - 如果你更看重安全性，请把 `CTI_CODEX_SANDBOX_MODE` 改成 `workspace-write` 或 `read-only`，并且不要把机器人暴露给你自己之外的账号。
 
 ## 给 Claude Code 用户
@@ -152,6 +153,16 @@ config.env.example
 1. 给 Telegram、Discord 或飞书机器人发消息
 2. 守护进程会创建或恢复代理会话
 3. 响应内容、工具调用和权限确认会回到聊天里
+
+另外，bridge 每次启动成功后，现在会尽量主动向已知 IM 目标推送一条状态消息。消息里会包含连接状态、设备/主机信息、当前 runtime（`Claude Code` 或 `Codex`）、模型标识、运行模式、已启用通道、PID、run ID 和工作目录，便于你快速确认它到底连到了哪台机器、哪一种终端会话。
+
+当前启动通知的目标来源是：
+
+- 已存在且仍然 active 的 channel binding
+- 已配置的 Telegram `CTI_TG_CHAT_ID`
+- 已配置的 Discord `CTI_DISCORD_ALLOWED_CHANNELS`
+
+如果某个平台当前还没有可靠的推送目标，bridge 会跳过这条启动通知，不会因此让整个启动失败。
 
 ## 命令别名语义
 
