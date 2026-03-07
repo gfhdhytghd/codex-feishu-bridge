@@ -93,8 +93,9 @@ CTI_RUN_MODE=foreground
 
 - Set `CTI_RUNTIME=codex` to force Codex
 - Codex bridge sessions enable network access by default; set `CTI_CODEX_NETWORK_ACCESS=false` if you need offline-only behavior
-- Codex bridge sessions default to `CTI_CODEX_SANDBOX_MODE=danger-full-access` in this fork so browser / AppleScript / desktop automation can behave much closer to a terminal-started Codex session on a trusted personal machine
+- Codex bridge sessions default to `CTI_CODEX_SANDBOX_MODE=danger-full-access` in this fork so browser / AppleScript / desktop automation can work on a trusted personal machine
 - The bridge skips the Git trust check for IM-managed Codex sessions
+- On macOS, the default background mode uses a per-user `launchd` LaunchAgent in `gui/<uid>`, so it usually still runs inside your logged-in desktop session
 - On macOS, launchd automatically forwards custom provider secrets declared as `env_key` in `~/.codex/config.toml`
 - This means third-party Codex API providers can usually be reused without duplicating credentials in the bridge config
 
@@ -222,7 +223,9 @@ Use these commands inside Codex or Claude Code:
 | `codex-to-im reconfigure` / `claude-to-im reconfigure` | Update existing config |
 | `codex-to-im doctor` / `claude-to-im doctor` | Run diagnostics |
 
-For users who want the bridge to run in the current login session instead of a background supervisor, use:
+The default and recommended mode on macOS is still the normal background supervisor, because that background path is a `launchd` LaunchAgent attached to the logged-in GUI session rather than a headless system daemon.
+
+If you still want the bridge to stay attached to the current Terminal process for debugging or closer parity with a hand-started CLI session, use:
 
 ```bash
 bash scripts/daemon.sh foreground
@@ -234,7 +237,7 @@ or:
 bash scripts/daemon.sh start --foreground
 ```
 
-This is especially useful on macOS when you want Telegram-driven Codex sessions to inherit the same front-session browser / AppleScript capabilities as a terminal-started Codex session.
+On macOS, you do not need foreground mode just to get browser / AppleScript / desktop access in the common case. A launchd-managed background bridge can often access the same desktop session too. Foreground mode is mainly useful when you want the process tied to the current Terminal for debugging or you specifically want to avoid launchd.
 
 If you do not want to remember `--foreground`, set this in `~/.claude-to-im/config.env`:
 
@@ -247,8 +250,8 @@ Then ordinary `claude-to-im start` or `bash scripts/daemon.sh start` will also l
 Foreground mode tradeoffs:
 
 - Keep that Terminal window open; closing it stops the bridge.
-- Foreground mode inherits the current desktop/login session more directly, which can improve Chrome / AppleScript behavior.
-- Foreground mode is also more powerful and less isolated than a background supervisor flow, so only use it on a trusted machine.
+- Foreground mode can still be useful for debugging or for reproducing the exact environment of a manually started CLI session.
+- On macOS, it is not a hard requirement for Chrome / AppleScript access if the normal background bridge is already running as a `gui/<uid>` LaunchAgent.
 
 Claude Code users can also use slash-command form:
 
@@ -286,7 +289,7 @@ CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
 CTI_DEFAULT_WORKDIR=/Users/yourname/project
 CTI_DEFAULT_MODE=code
-CTI_RUN_MODE=foreground
+CTI_RUN_MODE=background
 CTI_PERMISSION_POLICY=smart
 CTI_TG_BOT_TOKEN=123456:your_bot_token
 CTI_TG_CHAT_ID=123456789

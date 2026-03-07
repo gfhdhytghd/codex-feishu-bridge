@@ -181,4 +181,5 @@ Show results and suggest fixes for any failures. Common fixes:
 - Always mask secrets in output (show only last 4 characters)
 - **Never start the daemon without a valid config.env** — always check first, redirect to setup or show config example
 - The daemon runs as a background Node.js process managed by platform supervisor (launchd on macOS, setsid on Linux, WinSW/NSSM on Windows)
+- On macOS, the normal background path is a per-user `launchd` LaunchAgent in `gui/<uid>` when available, so it can still share the logged-in desktop session instead of behaving like a headless system daemon
 - Config persists at `~/.claude-to-im/config.env` — survives across sessions

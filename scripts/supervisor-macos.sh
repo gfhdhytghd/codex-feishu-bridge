@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # macOS supervisor — launchd-based process management.
+# On macOS we register the bridge as a per-user LaunchAgent in gui/<uid>,
+# not as a system LaunchDaemon. That means the "background" mode still runs
+# inside the logged-in user's GUI session when launchctl bootstrap succeeds.
 # Sourced by daemon.sh; expects CTI_HOME, SKILL_DIR, PID_FILE, STATUS_FILE, LOG_FILE.
 
 LAUNCHD_LABEL="com.claude-to-im.bridge"
@@ -157,7 +160,7 @@ supervisor_is_managed() {
 
 supervisor_status_extra() {
   if supervisor_is_managed; then
-    echo "Bridge is registered with launchd ($LAUNCHD_LABEL)"
+    echo "Bridge is registered with launchd GUI session ($LAUNCHD_LABEL)"
     # Extract PID from launchctl as the authoritative source
     local lc_pid
     lc_pid=$(launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null | grep -m1 'pid = ' | sed 's/.*pid = //' | tr -d ' ')

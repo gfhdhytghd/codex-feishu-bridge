@@ -93,8 +93,9 @@ CTI_RUN_MODE=foreground
 
 - `CTI_RUNTIME=codex` 表示强制使用 Codex
 - Codex 桥接会话默认开启网络访问；如果你希望 Codex 运行时完全离线，可设置 `CTI_CODEX_NETWORK_ACCESS=false`
-- 这个分支里的 Codex 桥接会话默认使用 `CTI_CODEX_SANDBOX_MODE=danger-full-access`，这样在可信个人机器上更接近你手动在终端里启动 Codex 时的浏览器 / AppleScript / 桌面自动化能力
+- 这个分支里的 Codex 桥接会话默认使用 `CTI_CODEX_SANDBOX_MODE=danger-full-access`，这样在可信个人机器上可以使用浏览器 / AppleScript / 桌面自动化能力
 - IM 发起的 Codex 会话默认跳过 Git 仓库信任检查
+- macOS 下，默认后台模式会以当前登录用户 `gui/<uid>` 下的 `launchd` LaunchAgent 运行，所以通常仍处于桌面图形会话里
 - macOS 下，launchd 会自动转发 `~/.codex/config.toml` 里 `env_key` 指向的第三方 Provider 密钥
 - 这意味着你现有的 Codex 第三方 API 配置通常可以直接复用
 
@@ -222,7 +223,9 @@ CTI_PERMISSION_POLICY=smart
 | `codex-to-im reconfigure` / `claude-to-im reconfigure` | 修改已有配置 |
 | `codex-to-im doctor` / `claude-to-im doctor` | 运行诊断 |
 
-如果你希望桥接运行在当前登录前台会话里，而不是后台 supervisor，可使用：
+在 macOS 上，默认推荐仍然是普通后台 supervisor，因为这里的后台通常是挂在当前登录用户 GUI 会话下的 `launchd` LaunchAgent，而不是没有桌面权限的系统守护进程。
+
+如果你仍然希望桥接绑定到当前 Terminal 进程，便于调试，或想尽量贴近你手动启动 CLI 的环境，可使用：
 
 ```bash
 bash scripts/daemon.sh foreground
@@ -234,7 +237,7 @@ bash scripts/daemon.sh foreground
 bash scripts/daemon.sh start --foreground
 ```
 
-这在 macOS 上尤其有用，因为 Telegram 驱动的 Codex 会话会更接近你手动在终端里启动 Codex 时的浏览器 / AppleScript / 前台桌面上下文能力。
+在 macOS 上，前台模式并不是获取浏览器 / AppleScript / 桌面访问能力的硬性前提。很多情况下，launchd 管理的后台 bridge 也能访问同一个桌面会话。前台模式主要是为了调试方便，或者你明确想避开 launchd。
 
 如果你不想每次都手动带 `--foreground`，可以在 `~/.claude-to-im/config.env` 里设置：
 
@@ -247,8 +250,8 @@ CTI_RUN_MODE=foreground
 前台模式的取舍：
 
 - 必须保持那个 Terminal 窗口一直开着，关掉窗口 bridge 就会停止。
-- 前台模式会更直接继承当前桌面登录会话，通常更有利于 Chrome / AppleScript 这类能力正常工作。
-- 但前台模式也意味着能力更强、隔离更弱，因此只适合在可信机器上使用。
+- 前台模式仍然适合调试，或者需要精确复现你手动启动 CLI 时的环境时使用。
+- 但在 macOS 上，如果普通后台 bridge 已经是 `gui/<uid>` 下的 LaunchAgent，就不必把前台模式当成 Chrome / AppleScript 正常工作的必要条件。
 
 Claude Code 用户也可以使用 slash command 形式：
 
@@ -286,7 +289,7 @@ CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
 CTI_DEFAULT_WORKDIR=/Users/yourname/project
 CTI_DEFAULT_MODE=code
-CTI_RUN_MODE=foreground
+CTI_RUN_MODE=background
 CTI_PERMISSION_POLICY=smart
 CTI_TG_BOT_TOKEN=123456:your_bot_token
 CTI_TG_CHAT_ID=123456789
