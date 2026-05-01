@@ -75,6 +75,16 @@ function requestTimeoutMs(): number {
   return Number.parseInt(process.env.CTI_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS || '', 10) || 30_000;
 }
 
+function appServerArgs(): string[] {
+  if (process.env.CTI_CODEX_APP_SERVER_CONNECT === 'proxy') {
+    const args = ['app-server', 'proxy'];
+    const sock = process.env.CTI_CODEX_APP_SERVER_SOCKET;
+    if (sock) args.push('--sock', sock);
+    return args;
+  }
+  return ['app-server', '--listen', 'stdio://'];
+}
+
 class AppServerClient {
   private child: ChildProcessWithoutNullStreams | null = null;
   private ready: Promise<void> | null = null;
@@ -91,7 +101,7 @@ class AppServerClient {
   }
 
   private async start(): Promise<void> {
-    const child = spawn(codexPath(), ['app-server', '--listen', 'stdio://'], {
+    const child = spawn(codexPath(), appServerArgs(), {
       cwd: process.cwd(),
       env: buildSubprocessEnv(),
       stdio: ['pipe', 'pipe', 'pipe'],
