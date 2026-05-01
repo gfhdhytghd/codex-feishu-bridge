@@ -182,6 +182,7 @@ class AppServerClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiters.delete(id);
+        this.child?.kill('SIGTERM');
         reject(new Error(`Codex app-server request timed out: ${method}`));
       }, timeout);
       this.waiters.set(id, {
@@ -589,18 +590,20 @@ export class CodexAppServerWithFallbackProvider implements LLMProvider {
     return new ReadableStream<string>({
       start(controller) {
         (async () => {
-          let emitted = false;
+          let meaningfulOutputEmitted = false;
           try {
             const appReader = self.appServer.streamChat(params).getReader();
             while (true) {
               const { value, done } = await appReader.read();
               if (done) break;
-              emitted = true;
+              if (!value.startsWith('event: status\n')) {
+                meaningfulOutputEmitted = true;
+              }
               controller.enqueue(value);
             }
             controller.close();
           } catch (err) {
-            if (emitted) {
+            if (meaningfulOutputEmitted) {
               const message = err instanceof Error ? err.message : String(err);
               console.warn('[codex-app-server] failed after streaming began:', message);
               try {
