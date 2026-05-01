@@ -52,6 +52,19 @@ export interface ConversationResult {
   previewText?: string;
 }
 
+function promptWithChannelContext(channelType: string, text: string): string {
+  if (channelType !== 'feishu') return text;
+  return [
+    '我正在飞书中与你交流。',
+    '',
+    '你正在通过 claude-to-im bridge 被 Feishu/Lark 用户远程驱动。回复会被渲染成飞书卡片；工具调用详细 log 会显示在卡片顶部并在完成时清除；工具调用概述应自然融入正文。',
+    '如需主动向当前飞书会话发送图片或文件，可使用 `/Users/linhaikuo/.codex/skills/claude-to-im/scripts/feishu-send.mjs`，它会读取 `~/.claude-to-im/config.env` 和当前 Feishu binding。',
+    '',
+    '当前用户消息：',
+    text,
+  ].join('\n');
+}
+
 /**
  * Process an inbound message: send to Claude, consume the response stream,
  * save to DB, and return the result.
@@ -160,7 +173,7 @@ export async function processMessage(
     }
 
     const stream = llm.streamChat({
-      prompt: text,
+      prompt: promptWithChannelContext(binding.channelType, text),
       sessionId,
       sdkSessionId: binding.sdkSessionId || undefined,
       model: effectiveModel,
