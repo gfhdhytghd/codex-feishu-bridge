@@ -51,6 +51,13 @@ function shouldPassModelToCodex(): boolean {
   return process.env.CTI_CODEX_PASS_MODEL === 'true';
 }
 
+function codexReasoningEffort(): string | undefined {
+  const effort = process.env.CTI_CODEX_REASONING_EFFORT;
+  return effort && ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(effort)
+    ? effort
+    : undefined;
+}
+
 function looksLikeClaudeModel(model?: string): boolean {
   return !!model && /^claude[-_]/i.test(model);
 }
@@ -143,9 +150,11 @@ export class CodexProvider implements LLMProvider {
 
             const approvalPolicy = toApprovalPolicy(self.permissionPolicy);
             const passModel = shouldPassModelToCodex();
+            const modelReasoningEffort = codexReasoningEffort();
 
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
+              ...(modelReasoningEffort ? { modelReasoningEffort } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
               approvalPolicy,
               networkAccessEnabled: self.networkAccessEnabled,

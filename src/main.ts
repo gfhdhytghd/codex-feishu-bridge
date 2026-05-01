@@ -40,9 +40,9 @@ async function resolveProvider(
   const runtime = config.runtime;
 
   if (runtime === 'codex') {
-    const { CodexProvider } = await import('./codex-provider.js');
+    const { CodexAppServerWithFallbackProvider } = await import('./codex-app-server-provider.js');
     return {
-      provider: new CodexProvider(
+      provider: new CodexAppServerWithFallbackProvider(
         pendingPerms,
         config.permissionPolicy,
         config.codexNetworkAccess,
@@ -62,9 +62,9 @@ async function resolveProvider(
       };
     }
     console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Codex');
-    const { CodexProvider } = await import('./codex-provider.js');
+    const { CodexAppServerWithFallbackProvider } = await import('./codex-app-server-provider.js');
     return {
-      provider: new CodexProvider(
+      provider: new CodexAppServerWithFallbackProvider(
         pendingPerms,
         config.permissionPolicy,
         config.codexNetworkAccess,
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
     }
     if (config.permissionPolicy !== 'never') {
       console.warn(
-        '[claude-to-im] WARNING: Codex runtime uses non-interactive codex exec under the hood. Per-tool IM approval prompts are limited and may not appear for every command.',
+        '[claude-to-im] WARNING: Codex runtime uses app-server with SDK fallback. Per-tool IM approval support is best-effort while the app-server protocol is experimental.',
       );
     }
   }
