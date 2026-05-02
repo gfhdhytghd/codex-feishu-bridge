@@ -636,22 +636,22 @@ export class CodexAppServerWithFallbackProvider implements LLMProvider {
     return new ReadableStream<string>({
       start(controller) {
         (async () => {
-          let meaningfulOutputEmitted = false;
+          let assistantTextEmitted = false;
           try {
             const appReader = self.appServer.streamChat(params).getReader();
             while (true) {
               const { value, done } = await appReader.read();
               if (done) break;
-              if (!value.startsWith('event: status\n')) {
-                meaningfulOutputEmitted = true;
+              if (isAssistantTextEvent(value)) {
+                assistantTextEmitted = true;
               }
               controller.enqueue(value);
             }
             controller.close();
           } catch (err) {
-            if (meaningfulOutputEmitted) {
+            if (assistantTextEmitted) {
               const message = err instanceof Error ? err.message : String(err);
-              console.warn('[codex-app-server] failed after streaming began:', message);
+              console.warn('[codex-app-server] failed after assistant text began:', message);
               try {
                 controller.enqueue(sseEvent('error', message));
                 controller.close();
@@ -660,7 +660,7 @@ export class CodexAppServerWithFallbackProvider implements LLMProvider {
             }
 
             console.warn(
-              '[codex-app-server] unavailable before first event; falling back to @openai/codex-sdk:',
+              '[codex-app-server] unavailable before assistant text; falling back to @openai/codex-sdk:',
               err instanceof Error ? err.message : err,
             );
             try {
@@ -679,4 +679,21 @@ export class CodexAppServerWithFallbackProvider implements LLMProvider {
       },
     });
   }
+}
+
+function isAssistantTextEvent(chunk: string): boolean {
+  if (!chunk.startsWith('event: text\n')) return false;
+  for (const line of chunk.split('\n')) {
+    if (!line.startsWith('data:')) continue;
+    const data = line.slice('data:'.length).trim();
+    if (!data) continue;
+    try {
+      const parsed = JSON.parse(data);
+      if (typeof parsed === 'string') return parsed.length > 0;
+      return true;
+    } catch {
+      return data.length > 0;
+    }
+  }
+  return false;
 }

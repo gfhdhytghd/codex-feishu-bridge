@@ -623,6 +623,9 @@ async function handleMessage(
             } catch { /* best effort */ }
             return;
           }
+          console.warn(
+            `[bridge-manager] Preview permission prompt failed for ${perm.permissionRequestId}; falling back to standalone permission card`,
+          );
         }
       }
       await broker.forwardPermissionRequest(
