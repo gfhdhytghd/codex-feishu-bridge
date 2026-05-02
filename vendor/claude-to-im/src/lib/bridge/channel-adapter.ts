@@ -91,6 +91,19 @@ export abstract class BaseChannelAdapter {
    */
   sendPreview?(_chatId: string, _text: string, _draftId: number): Promise<'sent' | 'skip' | 'degrade'>;
 
+  /** Show a permission request at the bottom of an in-flight preview card. */
+  showPreviewPermission?(
+    _chatId: string,
+    _draftId: number,
+    _permissionRequestId: string,
+    _toolName: string,
+    _toolInput: Record<string, unknown>,
+    _inlineButtons: import('./types').InlineButton[][],
+  ): Promise<{ ok: boolean; messageId?: string }>;
+
+  /** Remove any permission controls from an in-flight preview card. */
+  clearPreviewPermission?(_chatId: string, _draftId: number): void;
+
   /**
    * Signal the end of a preview cycle. The final message is sent via the
    * normal delivery path, so this is typically a no-op.

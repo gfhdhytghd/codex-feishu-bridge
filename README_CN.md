@@ -298,7 +298,7 @@ Claude Code 用户也可以使用 slash command 形式：
 ```env
 CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
-CTI_DEFAULT_WORKDIR=/Users/yourname/project
+CTI_DEFAULT_WORKDIR=/Users/yourname
 CTI_DEFAULT_MODE=code
 CTI_RUN_MODE=background
 CTI_PERMISSION_POLICY=smart

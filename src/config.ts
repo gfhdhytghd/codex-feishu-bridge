@@ -87,7 +87,7 @@ export function loadConfig(): Config {
   return {
     runtime,
     enabledChannels: splitCsv(env.get("CTI_ENABLED_CHANNELS")) ?? [],
-    defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
+    defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || os.homedir(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
     runMode: env.get("CTI_RUN_MODE") === "foreground" ? "foreground" : "background",

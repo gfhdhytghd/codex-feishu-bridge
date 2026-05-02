@@ -442,7 +442,8 @@ async function handleMessage(
   // Handle callback queries (permission buttons)
   if (msg.callbackData) {
     const handled = broker.handlePermissionCallback(msg.callbackData, msg.address.chatId, msg.callbackMessageId);
-    if (handled) {
+    const fromCardAction = Boolean((msg.raw as { action?: { value?: unknown } } | undefined)?.action?.value);
+    if (handled && !fromCardAction) {
       // Send confirmation
       const confirmMsg: OutboundMessage = {
         address: msg.address,
@@ -569,6 +570,47 @@ async function handleMessage(
     const promptText = text || (hasAttachments ? 'Describe this image.' : '');
 
     const result = await engine.processMessage(binding, promptText, async (perm) => {
+      if (
+        previewState
+        && !previewState.degraded
+        && adapter.showPreviewPermission
+        && adapter.sendPreview
+      ) {
+        const previewText = previewState.pendingText || previewState.lastSentText || '等待工具批准…';
+        const previewResult = await adapter.sendPreview(msg.address.chatId, previewText, previewState.draftId);
+        if (previewResult === 'degrade') {
+          previewState.degraded = true;
+        } else {
+          const inlineButtons = [
+            [
+              { text: '批准', callbackData: `perm:allow:${perm.permissionRequestId}` },
+              { text: '本轮批准', callbackData: `perm:allow_session:${perm.permissionRequestId}` },
+              { text: '不批准', callbackData: `perm:deny:${perm.permissionRequestId}` },
+            ],
+          ];
+          const shown = await adapter.showPreviewPermission(
+            msg.address.chatId,
+            previewState.draftId,
+            perm.permissionRequestId,
+            perm.toolName,
+            perm.toolInput,
+            inlineButtons,
+          );
+          if (shown.ok && shown.messageId) {
+            try {
+              store.insertPermissionLink({
+                permissionRequestId: perm.permissionRequestId,
+                channelType: adapter.channelType,
+                chatId: msg.address.chatId,
+                messageId: shown.messageId,
+                toolName: perm.toolName,
+                suggestions: perm.suggestions ? JSON.stringify(perm.suggestions) : '',
+              });
+            } catch { /* best effort */ }
+            return;
+          }
+        }
+      }
       await broker.forwardPermissionRequest(
         adapter,
         msg.address,

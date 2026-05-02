@@ -143,7 +143,7 @@ describe('loadConfig/saveConfig round-trip', () => {
     const m = configToSettings({
       runtime: 'claude',
       enabledChannels: [],
-      defaultWorkDir: process.cwd(),
+      defaultWorkDir: process.env.HOME || '',
       defaultMode: 'code',
       runMode: 'background',
       permissionPolicy: 'always',

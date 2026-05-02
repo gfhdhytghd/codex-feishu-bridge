@@ -71,6 +71,16 @@ type FeishuMessageEventData = {
   };
 };
 
+type FeishuCardActionEventData = {
+  open_id?: string;
+  user_id?: string;
+  open_message_id?: string;
+  action?: {
+    value?: Record<string, unknown>;
+    tag?: string;
+  };
+};
+
 
 /** MIME type guesses by message_type. */
 const MIME_BY_TYPE: Record<string, string> = {
@@ -98,7 +108,17 @@ export class FeishuAdapter extends BaseChannelAdapter {
   /** Track active typing reaction IDs per chat for cleanup. */
   private typingReactions = new Map<string, string>();
   /** Streaming preview card message IDs, keyed by bridge draft ID. */
-  private previewCards = new Map<number, { chatId: string; messageId: string; lastText: string }>();
+  private previewCards = new Map<number, {
+    chatId: string;
+    messageId: string;
+    lastText: string;
+    permission?: {
+      permissionRequestId: string;
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      inlineButtons: import('../types').InlineButton[][];
+    };
+  }>();
   /** Serialize create/patch operations per preview draft to avoid split cards. */
   private previewUpdateChains = new Map<number, Promise<'sent' | 'skip' | 'degrade'>>();
 
@@ -133,12 +153,12 @@ export class FeishuAdapter extends BaseChannelAdapter {
     this.running = true;
 
     // Create EventDispatcher and register event handlers.
-    // NOTE: card.action.trigger requires HTTP webhook (not supported via WSClient).
-    // Openclaw uses an HTTP server for card callbacks — CodePilot is a desktop app
-    // without a public endpoint, so we rely on text-based /perm commands instead.
     const dispatcher = new lark.EventDispatcher({}).register({
       'im.message.receive_v1': async (data) => {
         await this.handleIncomingEvent(data as FeishuMessageEventData);
+      },
+      'card.action.trigger': async (data) => {
+        await this.handleCardActionEvent(data as FeishuCardActionEventData);
       },
     });
 
@@ -315,7 +335,11 @@ export class FeishuAdapter extends BaseChannelAdapter {
     if (!this.restClient) return 'degrade';
 
     const existing = this.previewCards.get(draftId);
-    const content = buildStreamingCardContent(preprocessFeishuMarkdown(text));
+    const content = buildStreamingCardContent(
+      preprocessFeishuMarkdown(text),
+      false,
+      existing ? this.buildPreviewPermissionElements(chatId, draftId, existing.permission) : [],
+    );
 
     if (!existing) {
       try {
@@ -370,6 +394,90 @@ export class FeishuAdapter extends BaseChannelAdapter {
         data: { content: buildStreamingCardContent(preprocessFeishuMarkdown(existing.lastText), true) },
       }).catch(() => { /* non-critical */ });
     });
+  }
+
+  async showPreviewPermission(
+    chatId: string,
+    draftId: number,
+    permissionRequestId: string,
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    inlineButtons: import('../types').InlineButton[][],
+  ): Promise<{ ok: boolean; messageId?: string }> {
+    const current = this.previewCards.get(draftId);
+    if (!current || current.chatId !== chatId || !this.restClient) return { ok: false };
+    current.permission = { permissionRequestId, toolName, toolInput, inlineButtons };
+    const content = buildStreamingCardContent(
+      preprocessFeishuMarkdown(current.lastText),
+      false,
+      this.buildPreviewPermissionElements(chatId, draftId, current.permission),
+    );
+    try {
+      const res = await this.restClient.im.message.patch({
+        path: { message_id: current.messageId },
+        data: { content },
+      });
+      if (res && ((res as { code?: number }).code == null || (res as { code?: number }).code === 0)) {
+        return { ok: true, messageId: current.messageId };
+      }
+    } catch (err) {
+      console.warn('[feishu-adapter] Preview permission patch error:', err instanceof Error ? err.message : err);
+    }
+    return { ok: false };
+  }
+
+  clearPreviewPermission(chatId: string, draftId: number): void {
+    const chain = this.previewUpdateChains.get(draftId) ?? Promise.resolve<'sent' | 'skip' | 'degrade'>('sent');
+    void chain.finally(() => {
+      const current = this.previewCards.get(draftId);
+      if (!current || current.chatId !== chatId || !current.permission || !this.restClient) return;
+      current.permission = undefined;
+      this.restClient.im.message.patch({
+        path: { message_id: current.messageId },
+        data: {
+          content: buildStreamingCardContent(preprocessFeishuMarkdown(current.lastText), false),
+        },
+      }).catch(() => { /* non-critical */ });
+    });
+  }
+
+  private buildPreviewPermissionElements(
+    chatId: string,
+    draftId: number,
+    permission?: {
+      permissionRequestId: string;
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      inlineButtons: import('../types').InlineButton[][];
+    },
+  ): unknown[] {
+    if (!permission) return [];
+    const inputStr = JSON.stringify(permission.toolInput, null, 2);
+    const truncatedInput = inputStr.length > 300 ? inputStr.slice(0, 300) + '...' : inputStr;
+    const actions = permission.inlineButtons.flat().map((btn) => {
+      const action = btn.callbackData.split(':')[1];
+      const type = action === 'deny' ? 'danger' : action === 'allow' ? 'primary' : 'default';
+      return {
+        tag: 'button',
+        text: { tag: 'plain_text', content: btn.text },
+        type,
+        value: { callbackData: btn.callbackData, chatId, previewDraftId: draftId },
+      };
+    });
+    return [
+      { tag: 'hr' },
+      {
+        tag: 'markdown',
+        content: [
+          '**需要批准**',
+          `工具：\`${permission.toolName}\``,
+          '```json',
+          truncatedInput,
+          '```',
+        ].join('\n'),
+      },
+      { tag: 'action', actions, layout: 'trisection' },
+    ];
   }
 
   /**
@@ -449,11 +557,8 @@ export class FeishuAdapter extends BaseChannelAdapter {
 
   /**
    * Send a permission card with real Feishu card action buttons.
-   * Button clicks trigger card.action.trigger events handled by handleCardActionEvent().
-   * Feishu card action callbacks require HTTP webhook (not supported via WSClient).
-   * CodePilot is a desktop app without a public endpoint, so we send a
-   * well-formatted card with /perm text commands instead of clickable buttons.
-   * The user replies with the /perm command to approve/deny.
+   * Button clicks trigger card.action.trigger events and are converted to the
+   * same callbackData shape used by Telegram/Discord.
    */
   private async sendPermissionCard(
     chatId: string,
@@ -475,12 +580,26 @@ export class FeishuAdapter extends BaseChannelAdapter {
       return btn.text;
     });
 
-    // Schema 2.0 card with markdown — permission info + copyable commands
+    const actions = inlineButtons.flat().map((btn) => {
+      const action = btn.callbackData.split(':')[1];
+      const type = action === 'deny' ? 'danger' : action === 'allow' ? 'primary' : 'default';
+      return {
+        tag: 'button',
+        text: { tag: 'plain_text', content: btn.text },
+        type,
+        value: {
+          callbackData: btn.callbackData,
+          chatId,
+        },
+      };
+    });
+
+    // Schema 2.0 card with real buttons plus copyable /perm fallback.
     const cardContent = [
       text,
       '',
       '---',
-      '**Reply with one of these commands:**',
+      '**If buttons are unavailable, reply with one of these commands:**',
       ...permCommands,
     ].join('\n');
 
@@ -494,6 +613,7 @@ export class FeishuAdapter extends BaseChannelAdapter {
       body: {
         elements: [
           { tag: 'markdown', content: cardContent },
+          { tag: 'action', actions, layout: 'trisection' },
         ],
       },
     });
@@ -576,6 +696,41 @@ export class FeishuAdapter extends BaseChannelAdapter {
   }
 
   // ── Incoming event handler ──────────────────────────────────
+
+  private async handleCardActionEvent(data: FeishuCardActionEventData): Promise<void> {
+    try {
+      const value = data.action?.value || {};
+      const callbackData = typeof value.callbackData === 'string' ? value.callbackData : '';
+      const chatId = typeof value.chatId === 'string' ? value.chatId : '';
+      if (!callbackData.startsWith('perm:') || !chatId) return;
+      const previewDraftId = typeof value.previewDraftId === 'number' ? value.previewDraftId : 0;
+
+      const userId = data.open_id || data.user_id || '';
+      if (!this.isAuthorized(userId, chatId)) {
+        console.warn('[feishu-adapter] Unauthorized card action from userId:', userId, 'chatId:', chatId);
+        return;
+      }
+      if (previewDraftId) this.clearPreviewPermission(chatId, previewDraftId);
+
+      this.enqueue({
+        messageId: `card:${data.open_message_id || crypto.randomUUID()}:${Date.now()}`,
+        address: {
+          channelType: 'feishu',
+          chatId,
+          userId,
+        },
+        text: callbackData,
+        timestamp: Date.now(),
+        callbackData,
+        raw: data,
+      });
+    } catch (err) {
+      console.error(
+        '[feishu-adapter] Unhandled error in card action handler:',
+        err instanceof Error ? err.stack || err.message : err,
+      );
+    }
+  }
 
   private async handleIncomingEvent(data: FeishuMessageEventData): Promise<void> {
     try {

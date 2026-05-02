@@ -58,7 +58,7 @@ export function buildCardContent(text: string): string {
  * Build a Feishu shared card for streaming previews.
  * `update_multi: true` is required by Feishu's message patch API.
  */
-export function buildStreamingCardContent(text: string, done = false): string {
+export function buildStreamingCardContent(text: string, done = false, extraElements: unknown[] = []): string {
   return JSON.stringify({
     schema: '2.0',
     config: {
@@ -75,6 +75,7 @@ export function buildStreamingCardContent(text: string, done = false): string {
           tag: 'markdown',
           content: text || '处理中…',
         },
+        ...extraElements,
       ],
     },
   });

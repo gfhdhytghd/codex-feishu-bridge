@@ -298,7 +298,7 @@ Optional but common:
 ```env
 CTI_RUNTIME=codex
 CTI_ENABLED_CHANNELS=telegram
-CTI_DEFAULT_WORKDIR=/Users/yourname/project
+CTI_DEFAULT_WORKDIR=/Users/yourname
 CTI_DEFAULT_MODE=code
 CTI_RUN_MODE=background
 CTI_PERMISSION_POLICY=smart
