@@ -108,7 +108,7 @@ export abstract class BaseChannelAdapter {
    * Signal the end of a preview cycle. The final message is sent via the
    * normal delivery path, so this is typically a no-op.
    */
-  endPreview?(_chatId: string, _draftId: number): void;
+  endPreview?(_chatId: string, _draftId: number, _options?: { guided?: boolean }): void;
 }
 
 // ── Adapter Registry ────────────────────────────────────────────

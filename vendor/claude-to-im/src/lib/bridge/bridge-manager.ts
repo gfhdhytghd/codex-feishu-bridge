@@ -145,7 +145,13 @@ interface BridgeManagerState {
   running: boolean;
   startedAt: string | null;
   loopAborts: Map<string, AbortController>;
-  activeTasks: Map<string, AbortController>;
+  activeTasks: Map<string, {
+    abort: AbortController;
+    adapter: BaseChannelAdapter;
+    chatId: string;
+    previewState: StreamingPreviewState | null;
+    guided: boolean;
+  }>;
   /** Per-session processing chains for concurrency control */
   sessionLocks: Map<string, Promise<void>>;
   autoStartChecked: boolean;
@@ -368,20 +374,21 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
           await handleMessage(adapter, msg);
         } else {
           const binding = router.resolve(msg.address);
-          const { llm } = getBridgeContext();
           const activeTask = state.activeTasks.get(binding.codepilotSessionId);
-          const steerTurn = (llm as unknown as {
-            steerTurn?: (sessionId: string, text: string) => Promise<boolean>;
-          }).steerTurn;
-          if (activeTask && steerTurn && msg.text.trim()) {
-            try {
-              const steered = await steerTurn.call(llm, binding.codepilotSessionId, msg.text.trim());
-              if (steered) {
-                if (msg.updateId != null) adapter.acknowledgeUpdate?.(msg.updateId);
-                continue;
+          if (activeTask && msg.text.trim()) {
+            activeTask.guided = true;
+            activeTask.abort.abort();
+            if (activeTask.previewState && !activeTask.previewState.degraded) {
+              if (activeTask.previewState.throttleTimer) {
+                clearTimeout(activeTask.previewState.throttleTimer);
+                activeTask.previewState.throttleTimer = null;
               }
-            } catch (err) {
-              console.warn('[bridge-manager] Failed to steer active Codex turn:', err instanceof Error ? err.message : err);
+              activeTask.adapter.endPreview?.(
+                activeTask.chatId,
+                activeTask.previewState.draftId,
+                { guided: true },
+              );
+              activeTask.previewState.degraded = true;
             }
           }
           // Fire-and-forget into session lock — loop continues to accept
@@ -488,10 +495,9 @@ async function handleMessage(
   // Notify adapter that message processing is starting (e.g., typing indicator)
   adapter.onMessageStart?.(msg.address.chatId);
 
-  // Create an AbortController so /stop can cancel this task externally
+  // Create an AbortController so /stop or guided follow-up messages can cancel this task.
   const taskAbort = new AbortController();
   const state = getState();
-  state.activeTasks.set(binding.codepilotSessionId, taskAbort);
 
   // ── Streaming preview setup ──────────────────────────────────
   let previewState: StreamingPreviewState | null = null;
@@ -507,6 +513,14 @@ async function handleMessage(
       pendingText: '',
     };
   }
+  const activeRecord = {
+    abort: taskAbort,
+    adapter,
+    chatId: msg.address.chatId,
+    previewState,
+    guided: false,
+  };
+  state.activeTasks.set(binding.codepilotSessionId, activeRecord);
 
   const streamCfg = previewState ? getStreamConfig(adapter.channelType) : null;
 
@@ -626,7 +640,10 @@ async function handleMessage(
     // Feishu streaming preview uses a real shared card that is patched in-place.
     // If it is healthy, force-flush the final text to that card and avoid sending
     // a duplicate final message.
-    if (result.responseText) {
+    if (activeRecord.guided) {
+      // A follow-up message took over this session. The old preview card has
+      // already been finalized as guided; avoid sending a duplicate abort/error.
+    } else if (result.responseText) {
       let deliveredByPreview = false;
       if (
         previewState
@@ -673,7 +690,7 @@ async function handleMessage(
         clearTimeout(previewState.throttleTimer);
         previewState.throttleTimer = null;
       }
-      adapter.endPreview?.(msg.address.chatId, previewState.draftId);
+      adapter.endPreview?.(msg.address.chatId, previewState.draftId, { guided: activeRecord.guided });
     }
 
     state.activeTasks.delete(binding.codepilotSessionId);
@@ -833,7 +850,7 @@ async function handleCommand(
       const st = getState();
       const taskAbort = st.activeTasks.get(binding.codepilotSessionId);
       if (taskAbort) {
-        taskAbort.abort();
+        taskAbort.abort.abort();
         st.activeTasks.delete(binding.codepilotSessionId);
         response = 'Stopping current task...';
       } else {

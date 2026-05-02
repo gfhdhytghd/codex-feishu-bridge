@@ -381,7 +381,7 @@ export class FeishuAdapter extends BaseChannelAdapter {
     }
   }
 
-  endPreview(chatId: string, draftId: number): void {
+  endPreview(chatId: string, draftId: number, options?: { guided?: boolean }): void {
     const chain = this.previewUpdateChains.get(draftId) ?? Promise.resolve<'sent' | 'skip' | 'degrade'>('sent');
     void chain.finally(() => {
       const existing = this.previewCards.get(draftId);
@@ -391,7 +391,14 @@ export class FeishuAdapter extends BaseChannelAdapter {
 
       this.restClient.im.message.patch({
         path: { message_id: existing.messageId },
-        data: { content: buildStreamingCardContent(preprocessFeishuMarkdown(existing.lastText), true) },
+        data: {
+          content: buildStreamingCardContent(
+            preprocessFeishuMarkdown(existing.lastText),
+            true,
+            [],
+            options?.guided ? 'Codex 完成（被引导）' : undefined,
+          ),
+        },
       }).catch(() => { /* non-critical */ });
     });
   }
