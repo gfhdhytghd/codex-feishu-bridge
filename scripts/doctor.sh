@@ -95,6 +95,14 @@ if [ "$CTI_RUNTIME" = "codex" ] || [ "$CTI_RUNTIME" = "auto" ]; then
   CODEX_AUTH=1
   if [ -n "${CTI_CODEX_API_KEY:-}" ] || [ -n "${CODEX_API_KEY:-}" ] || [ -n "${OPENAI_API_KEY:-}" ]; then
     CODEX_AUTH=0
+  elif [ -f "${CODEX_HOME:-$HOME/.codex}/auth.json" ] && node -e "
+    const fs = require('fs');
+    const file = process.argv[1];
+    const auth = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (auth.OPENAI_API_KEY || auth.tokens?.access_token || auth.tokens?.refresh_token) process.exit(0);
+    process.exit(1);
+  " "${CODEX_HOME:-$HOME/.codex}/auth.json" >/dev/null 2>&1; then
+    CODEX_AUTH=0
   elif command -v codex &>/dev/null; then
     CODEX_AUTH_OUT=$(codex auth status 2>&1 || true)
     if echo "$CODEX_AUTH_OUT" | grep -qiE 'logged.in|authenticated'; then
@@ -220,9 +228,17 @@ fi
 
 # --- Recent errors in log ---
 if [ -f "$LOG_FILE" ]; then
-  ERROR_COUNT=$(tail -50 "$LOG_FILE" | grep -ciE 'ERROR|Fatal' || true)
+  RECENT_LOG=$(awk '
+    /\[claude-to-im\] Starting bridge/ { buf = ""; seen = 1 }
+    { if (seen) buf = buf $0 "\n" }
+    END { printf "%s", seen ? buf : "" }
+  ' "$LOG_FILE")
+  if [ -z "$RECENT_LOG" ]; then
+    RECENT_LOG=$(tail -50 "$LOG_FILE")
+  fi
+  ERROR_COUNT=$(printf "%s" "$RECENT_LOG" | grep -vi 'DeprecationWarning' | grep -ciE 'ERROR|Fatal' || true)
   if [ "$ERROR_COUNT" -eq 0 ]; then
-    check "No recent errors in log (last 50 lines)" 0
+    check "No recent errors in log (since last bridge start)" 0
   else
     check "No recent errors in log (found $ERROR_COUNT ERROR/Fatal lines)" 1
   fi

@@ -1,350 +1,229 @@
-# Codex-Claude-to-IM Skill
+# Codex 飞书桥
 
-Bridge Codex or Claude Code to Telegram, Discord, and Feishu/Lark so you can chat with your coding agent from IM.
+把本机 Codex 接入飞书，让你可以在飞书会话里远程驱动 Codex 处理代码、查看日志、运行命令和交付文件。
 
-[中文说明](README_CN.md)
+本项目当前面向一个明确场景：**Codex + 飞书/Lark**。文档不再覆盖其他运行时或其他 IM 平台。
 
-> Derived from [op7418/Claude-to-IM-skill](https://github.com/op7418/Claude-to-IM-skill), published under the MIT License. This repository keeps the original MIT license notice and adds packaging, documentation, and compatibility updates for direct reuse.
+> 说明：项目派生自上游 MIT 项目，仓库内部仍可能保留少量兼容旧配置的变量名或目录名，例如 `~/.claude-to-im/`。这些属于历史兼容路径，不代表当前对外支持其他运行时。
 
-## Start Here
+## 配置指南
 
-Choose the path that matches your tool:
+### 前置要求
 
-- **I use Codex**
-  Go to [For Codex Users](#for-codex-users)
-- **I use Claude Code**
-  Go to [For Claude Code Users](#for-claude-code-users)
-- **I want to compare both**
-  Go to [Runtime Modes](#runtime-modes)
-- **I only need platform setup**
-  Go to [Platform Setup](#platform-setup)
-- **I want to develop or modify the project**
-  Go to [Development](#development)
+- Node.js 20+
+- 已安装并登录 Codex CLI
+- 一个飞书或 Lark 自建应用
+- 当前机器可以访问飞书开放平台
 
-## What This Repository Includes
-
-- `SKILL.md` for agent discovery
-- full source code in `src/`
-- scripts in `scripts/`
-- setup guides in `references/`
-- tests, build config, and packaging files
-
-## For Codex Users
-
-### 1. Install
-
-Recommended:
+Codex 登录可用以下任一方式完成：
 
 ```bash
-git clone https://github.com/viewer12/Codex-Claude-to-IM-skill.git ~/code/Codex-Claude-to-IM-skill
-bash ~/code/Codex-Claude-to-IM-skill/scripts/install-codex.sh
+codex auth login
 ```
 
-Development symlink mode:
+或在环境变量中提供 `OPENAI_API_KEY`、`CODEX_API_KEY`、`CTI_CODEX_API_KEY` 等凭据。
+
+### 安装
+
+推荐安装：
 
 ```bash
-bash ~/code/Codex-Claude-to-IM-skill/scripts/install-codex.sh --link
+git clone https://github.com/viewer12/codex-feishu-bridge.git ~/code/codex-feishu-bridge
+bash ~/code/codex-feishu-bridge/scripts/install-codex.sh
 ```
 
-Manual install:
+开发联动模式：
 
 ```bash
-git clone https://github.com/viewer12/Codex-Claude-to-IM-skill.git ~/.codex/skills/claude-to-im
-cd ~/.codex/skills/claude-to-im
+bash ~/code/codex-feishu-bridge/scripts/install-codex.sh --link
+```
+
+手动安装：
+
+```bash
+git clone https://github.com/viewer12/codex-feishu-bridge.git ~/.codex/skills/codex-to-im
+cd ~/.codex/skills/codex-to-im
 npm install
 npm run build
 ```
 
-### 2. Configure
+如果你仍在旧路径 `~/.codex/skills/claude-to-im` 中使用本项目，也可以继续运行；新文档统一使用 `codex-feishu-bridge` 命名。
 
-Inside Codex:
+### 创建飞书应用
+
+1. 打开飞书开放平台：`https://open.feishu.cn/app`
+2. 创建自建应用
+3. 在“凭证与基础信息”中复制 `App ID` 和 `App Secret`
+4. 进入“权限管理”，添加消息收发、机器人、文件读写等权限
+5. 进入“添加应用能力”，启用机器人
+6. 进入“事件与回调”，选择长连接模式
+7. 添加事件：`im.message.receive_v1`、`p2p_chat_create`
+8. 创建版本并发布，确保应用已被管理员审核通过
+
+权限批量配置和更细步骤见 [references/setup-guides.md](references/setup-guides.md) 的飞书部分。
+
+### 配置本机
+
+在 Codex 中执行：
 
 ```text
 codex-to-im setup
 ```
 
-If interactive setup is unavailable, create:
+如果当前环境不支持交互式配置，手动创建：
 
 ```bash
 ~/.claude-to-im/config.env
 ```
 
-from:
-
-```bash
-config.env.example
-```
-
-### 3. Start
-
-Inside Codex:
-
-```text
-codex-to-im start
-```
-
-If you want plain `start` to run in the current foreground Terminal session instead of a background supervisor, add this to `~/.claude-to-im/config.env`:
+最小配置示例：
 
 ```env
-CTI_RUN_MODE=foreground
-```
-
-### Codex-Specific Notes
-
-- Set `CTI_RUNTIME=codex` to force Codex
-- Codex bridge sessions enable network access by default; set `CTI_CODEX_NETWORK_ACCESS=false` if you need offline-only behavior
-- Codex bridge sessions default to `CTI_CODEX_SANDBOX_MODE=danger-full-access` in this fork so browser / AppleScript / desktop automation can work on a trusted personal machine
-- The bridge skips the Git trust check for IM-managed Codex sessions
-- On macOS, the default background mode uses a per-user `launchd` LaunchAgent in `gui/<uid>`, so it usually still runs inside your logged-in desktop session
-- On macOS, launchd automatically forwards custom provider secrets declared as `env_key` in `~/.codex/config.toml`
-- This means third-party Codex API providers can usually be reused without duplicating credentials in the bridge config
-
-### Risk Notes For Codex Runtime
-
-- This fork intentionally favors convenience on a trusted personal machine over strict isolation.
-- `CTI_CODEX_SANDBOX_MODE=danger-full-access` gives Telegram-driven Codex sessions broad access to local files, GUI automation entrypoints, browsers, and system commands.
-- Codex runtime is backed by non-interactive `codex exec`, not the full interactive TUI. As a result, IM-side per-tool approval prompts are limited and should not be treated as a guaranteed security boundary.
-- Startup notifications can include hostnames, usernames, workdirs, and other local runtime metadata in IM chats. Only enable the bridge for chats and channels you trust.
-- If you need a safer setup, lower `CTI_CODEX_SANDBOX_MODE` to `workspace-write` or `read-only`, and avoid exposing the bot beyond your own account.
-
-## For Claude Code Users
-
-### 1. Install
-
-```bash
-git clone https://github.com/viewer12/Codex-Claude-to-IM-skill.git ~/.claude/skills/claude-to-im
-cd ~/.claude/skills/claude-to-im
-npm install
-npm run build
-```
-
-### 2. Configure
-
-Inside Claude Code:
-
-```text
-/claude-to-im setup
-```
-
-If interactive setup is unavailable, create:
-
-```bash
-~/.claude-to-im/config.env
-```
-
-from:
-
-```bash
-config.env.example
-```
-
-### 3. Start
-
-Inside Claude Code:
-
-```text
-/claude-to-im start
-```
-
-## Shared User Flow
-
-After setup and start:
-
-1. Send a message to your Telegram, Discord, or Feishu bot
-2. The daemon creates or resumes an agent session
-3. Responses, tool calls, and permission prompts return to chat
-
-On startup, the bridge also tries to push a short status message to already-known IM targets when possible. The message includes connection status, device/host info, runtime (`Claude Code` or `Codex`), model label, run mode, channels, PID, run ID, and workdir so you can quickly verify which machine and session came online.
-
-Current startup notification targets are:
-
-- existing active channel bindings
-- Telegram `CTI_TG_CHAT_ID` when configured
-- Discord `CTI_DISCORD_ALLOWED_CHANNELS` when configured
-
-If a platform does not yet have a reliable outbound target, the bridge skips the startup notification for that platform instead of failing startup.
-
-## Command Aliases
-
-Command aliases decide the bridge runtime explicitly, regardless of which tool you are currently using:
-
-- `codex-to-im ...` forces the bridge to run with Codex runtime for that command
-- `claude-to-im ...` forces the bridge to run with Claude runtime for that command
-- plain commands like `start bridge` continue to use `CTI_RUNTIME` from `~/.claude-to-im/config.env`
-
-Examples:
-
-```text
-codex-to-im start
-claude-to-im start
-```
-
-That means:
-
-- in Codex, `claude-to-im start` should still launch a Claude-backed bridge
-- in Claude Code, `codex-to-im start` should still launch a Codex-backed bridge
-
-## Tool Approval Policy
-
-Configure `CTI_PERMISSION_POLICY` in `~/.claude-to-im/config.env`:
-
-- `always`: every tool call requires IM approval. This is the default and preserves the old behavior.
-- `smart`: the bridge auto-approves low-risk actions and asks for approval only when the tool or operation looks sensitive.
-- `never`: auto-approve every tool call. Use only in tightly controlled environments.
-
-`CTI_AUTO_APPROVE=true` is still supported as a legacy alias for `CTI_PERMISSION_POLICY=never`.
-
-Example:
-
-```env
+CTI_RUNTIME=codex
+CTI_ENABLED_CHANNELS=feishu
+CTI_DEFAULT_WORKDIR=/Users/yourname
+CTI_DEFAULT_MODE=code
+CTI_RUN_MODE=background
 CTI_PERMISSION_POLICY=smart
+
+CTI_FEISHU_APP_ID=cli_xxxxxxxxxxxxx
+CTI_FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+CTI_FEISHU_DOMAIN=https://open.feishu.cn
+CTI_FEISHU_ALLOWED_USERS=
+
+CTI_CODEX_NETWORK_ACCESS=true
+CTI_CODEX_SANDBOX_MODE=danger-full-access
 ```
 
-### Smart policy rules
+完整模板见 [config.env.example](config.env.example)。
 
-In `smart` mode, the bridge currently applies these rules:
+### 启动
 
-- Auto-approve read-only tools such as `Read`, `Grep`, `Glob`, and `LS`
-- Auto-approve file edits only when every target stays inside `CTI_DEFAULT_WORKDIR` and avoids sensitive paths such as `~/.ssh`, `~/.codex`, `~/.claude`, `~/.aws`, `/etc`, and shell profile / secret files
-- Auto-approve low-risk shell inspection commands such as `pwd`, `ls`, `rg`, `git status`, `git diff`, and common local test/build checks
-- Auto-approve read-only network fetches when they look like plain `GET` / `HEAD` reads without request bodies, local file uploads, or explicit credentials
-- Auto-approve network calls that post back to the connected IM platform (for example Telegram / Discord / Feishu delivery APIs), unless they include obvious local file upload payloads
-- Require approval for shell commands that can mutate files, change permissions, control the OS, access protected macOS state, install software, upload local data, send authenticated requests to external services, or change Git remote/repository state
-- Auto-approve IM-delivery MCP tools and obviously read-like MCP tools (for example `get`, `list`, `search`, `query`); require approval for other write-capable or unknown external-state MCP tools
-- Require approval for `WebFetch` only when it includes request bodies, credentials, cookies, custom headers, or non-read-only methods
+在 Codex 中执行：
 
-### Runtime note
+```text
+codex-to-im start
+```
 
-- Claude runtime supports the full `smart` policy with per-tool decisions in chat.
-- Codex runtime currently only exposes thread-level approval policy in the SDK. In that runtime, `smart` falls back to conservative approval prompts instead of selective auto-approval.
+也可以直接运行脚本：
 
-## Commands
+```bash
+bash scripts/daemon.sh start
+```
 
-Use these commands inside Codex or Claude Code:
+macOS 默认会通过当前登录用户的 `launchd` LaunchAgent 后台运行，通常仍可访问同一个桌面图形会话。
 
-| Command | Purpose |
-|---|---|
-| `codex-to-im setup` | Configure the bridge, defaulting runtime to Codex |
-| `codex-to-im start` | Start the bridge with Codex runtime |
-| `claude-to-im setup` | Configure the bridge, defaulting runtime to Claude |
-| `claude-to-im start` | Start the bridge with Claude runtime |
-| `codex-to-im stop` / `claude-to-im stop` | Stop the running bridge |
-| `codex-to-im status` / `claude-to-im status` | Show current status |
-| `codex-to-im logs 200` / `claude-to-im logs 200` | Tail logs |
-| `codex-to-im reconfigure` / `claude-to-im reconfigure` | Update existing config |
-| `codex-to-im doctor` / `claude-to-im doctor` | Run diagnostics |
-
-The default and recommended mode on macOS is still the normal background supervisor, because that background path is a `launchd` LaunchAgent attached to the logged-in GUI session rather than a headless system daemon.
-
-If you still want the bridge to stay attached to the current Terminal process for debugging or closer parity with a hand-started CLI session, use:
+如果需要前台调试：
 
 ```bash
 bash scripts/daemon.sh foreground
 ```
 
-or:
-
-```bash
-bash scripts/daemon.sh start --foreground
-```
-
-On macOS, you do not need foreground mode just to get browser / AppleScript / desktop access in the common case. A launchd-managed background bridge can often access the same desktop session too. Foreground mode is mainly useful when you want the process tied to the current Terminal for debugging or you specifically want to avoid launchd.
-
-If you do not want to remember `--foreground`, set this in `~/.claude-to-im/config.env`:
+或在配置中设置：
 
 ```env
 CTI_RUN_MODE=foreground
 ```
 
-Then ordinary `claude-to-im start` or `bash scripts/daemon.sh start` will also launch in foreground mode.
+### 验证
 
-Foreground mode tradeoffs:
-
-- Keep that Terminal window open; closing it stops the bridge.
-- Foreground mode can still be useful for debugging or for reproducing the exact environment of a manually started CLI session.
-- On macOS, it is not a hard requirement for Chrome / AppleScript access if the normal background bridge is already running as a `gui/<uid>` LaunchAgent.
-
-Claude Code users can also use slash-command form:
+启动后，在飞书里给机器人发一条消息，例如：
 
 ```text
-/claude-to-im setup
-/claude-to-im start
-/claude-to-im stop
+现在在哪个目录？运行 pwd 看一下
 ```
 
-## Runtime Modes
+如果正常，飞书会收到 Codex 的回复和工具调用状态。
 
-Set `CTI_RUNTIME` in `~/.claude-to-im/config.env`:
+常用检查命令：
 
-- `codex`: use Codex SDK and Codex CLI
-- `claude`: use Claude Agent SDK and Claude Code CLI
-- `auto`: try Claude first, then Codex fallback
-
-## Prerequisites
-
-- Node.js 20+
-- At least one runtime installed:
-  - Codex CLI for `codex` or `auto`
-  - Claude Code CLI for `claude` or `auto`
-- Bot/app credentials for at least one IM platform
-
-Optional but common:
-
-- existing Codex login or provider setup in `~/.codex/config.toml`
-- `OPENAI_API_KEY`, `CODEX_API_KEY`, or provider-specific environment variables
-
-## Minimal Config Example
-
-```env
-CTI_RUNTIME=codex
-CTI_ENABLED_CHANNELS=telegram
-CTI_DEFAULT_WORKDIR=/Users/yourname
-CTI_DEFAULT_MODE=code
-CTI_RUN_MODE=background
-CTI_PERMISSION_POLICY=smart
-CTI_TG_BOT_TOKEN=123456:your_bot_token
-CTI_TG_CHAT_ID=123456789
+```bash
+bash scripts/daemon.sh status
+bash scripts/daemon.sh logs 100
+bash scripts/doctor.sh
 ```
 
-Full template:
+### 常用命令
 
-- [config.env.example](config.env.example)
+| 命令 | 用途 |
+|---|---|
+| `codex-to-im setup` | 配置 Codex 飞书桥 |
+| `codex-to-im start` | 启动桥接 |
+| `codex-to-im stop` | 停止桥接 |
+| `codex-to-im status` | 查看状态 |
+| `codex-to-im logs 200` | 查看最近 200 行日志 |
+| `codex-to-im reconfigure` | 修改已有配置 |
+| `codex-to-im doctor` | 运行诊断 |
 
-## Platform Setup
+### 常见问题
 
-### Telegram
+#### 飞书里没有响应
 
-1. Create a bot with `@BotFather`
-2. Copy the bot token
-3. Send at least one message to the bot
-4. Obtain your chat ID or allowed user IDs
+优先检查：
 
-### Discord
+```bash
+bash scripts/doctor.sh
+bash scripts/daemon.sh logs 200
+```
 
-1. Create an app in Discord Developer Portal
-2. Create or reset the bot token
-3. Enable Message Content Intent
-4. Invite the bot to your server
-5. Configure allowed users or channels
+重点确认：
 
-### Feishu / Lark
+- 飞书应用版本已发布并通过审核
+- 长连接事件已启用
+- `im.message.receive_v1` 事件已添加
+- `CTI_FEISHU_APP_ID` 和 `CTI_FEISHU_APP_SECRET` 正确
+- `CTI_FEISHU_ALLOWED_USERS` 没有误把当前用户排除
 
-1. Create a custom app
-2. Get App ID and App Secret
-3. Add required permissions
-4. Enable the bot capability
-5. Configure long-connection events
-6. Publish the app version
+#### Codex 在终端正常，飞书里不正常
 
-Detailed guides:
+重启桥接，让后台进程重新读取环境变量：
 
-- [references/setup-guides.md](references/setup-guides.md)
-- [references/usage.md](references/usage.md)
-- [references/troubleshooting.md](references/troubleshooting.md)
+```bash
+bash scripts/daemon.sh stop
+bash scripts/daemon.sh start
+```
 
-## Operations
+并确认后台进程能读取你的 Codex 登录状态或 API 环境变量。
 
-Runtime data is stored in:
+#### 需要发送文件或图片到当前飞书会话
+
+项目内置了飞书发送辅助脚本：
+
+```bash
+node scripts/feishu-send.mjs text "消息内容"
+node scripts/feishu-send.mjs file /path/to/file
+node scripts/feishu-send.mjs image /path/to/image.png
+```
+
+脚本会读取 `~/.claude-to-im/config.env` 和当前飞书会话 binding。
+
+## 技术说明
+
+### 架构
+
+```text
+Feishu/Lark
+    ↓ 长连接事件
+Bridge daemon
+    ↓ 会话路由 / 权限策略 / 消息渲染
+Codex runtime
+    ↓ 工具调用 / 文件读写 / 命令执行
+本机项目目录
+```
+
+核心组件：
+
+- `src/main.ts`：守护进程入口
+- `src/channels/`：飞书通道和消息收发
+- `src/runtime/`：Codex 会话调用
+- `src/lib/`：配置、权限、状态、日志等共享逻辑
+- `scripts/daemon.sh`：启动、停止、状态、日志入口
+- `scripts/doctor.sh`：本机诊断
+- `scripts/install-codex.sh`：安装到 Codex skills
+
+### 运行数据
+
+运行数据默认保存在：
 
 ```text
 ~/.claude-to-im/
@@ -354,95 +233,67 @@ Runtime data is stored in:
 └── runtime/status.json
 ```
 
-Useful shell commands:
+当前仍使用这个历史目录以兼容已有安装和脚本。不要把 `config.env` 提交到 Git。
 
-```bash
-bash scripts/daemon.sh status
-bash scripts/daemon.sh logs 100
-bash scripts/doctor.sh
+### 权限策略
+
+通过 `CTI_PERMISSION_POLICY` 控制工具审批：
+
+- `always`：每次工具调用都要求 IM 审批
+- `smart`：低风险只读、工作目录内编辑等操作自动放行，敏感操作要求审批
+- `never`：全部自动放行，仅适合强信任环境
+
+Codex runtime 当前主要暴露会话级审批能力，因此 `smart` 会比逐工具审批更保守。
+
+### Codex 运行参数
+
+常用配置：
+
+```env
+CTI_CODEX_NETWORK_ACCESS=true
+CTI_CODEX_SANDBOX_MODE=danger-full-access
+CTI_CODEX_REASONING_EFFORT=
+CTI_CODEX_PASS_MODEL=false
+CTI_DEFAULT_MODEL=
 ```
 
-## Troubleshooting
+`danger-full-access` 适合可信个人机器上的远程自动化，但会显著降低隔离强度。更保守的选择是：
 
-### Codex works in terminal but not in IM
-
-Restart the bridge so the service reloads environment variables:
-
-```bash
-bash scripts/daemon.sh stop
-bash scripts/daemon.sh start
+```env
+CTI_CODEX_SANDBOX_MODE=workspace-write
 ```
 
-### Bridge starts but agent requests fail
+或：
 
-Check:
-
-- `bash scripts/doctor.sh`
-- your runtime CLI works directly
-- required provider env vars exist
-- `~/.codex/config.toml` or Claude auth is valid
-
-### No configuration found
-
-Create:
-
-```bash
-~/.claude-to-im/config.env
+```env
+CTI_CODEX_SANDBOX_MODE=read-only
 ```
 
-from:
-
-```bash
-config.env.example
-```
-
-### Logs
-
-```bash
-~/.claude-to-im/logs/bridge.log
-```
-
-## Development
-
-Install dependencies:
+### 构建与测试
 
 ```bash
 npm install
-```
-
-Run tests:
-
-```bash
-npm test
-```
-
-Build:
-
-```bash
 npm run build
+npm test
+npm run typecheck
 ```
 
-Run dev mode:
+开发模式：
 
 ```bash
 npm run dev
 ```
 
-## Upstream and License
+### 安全注意事项
 
-Original upstream project:
+- `~/.claude-to-im/config.env` 应保持 `600` 权限
+- 飞书应用只发布给可信用户或可信群聊
+- 不要把机器人加入不受控群聊
+- `danger-full-access` 会让飞书侧驱动的 Codex 具备较高本机访问能力
+- 日志会尽量脱敏，但仍应避免在聊天里直接发送长期有效密钥
 
-- [op7418/Claude-to-IM-skill](https://github.com/op7418/Claude-to-IM-skill)
+更多安全说明见 [SECURITY.md](SECURITY.md)。
 
-This repository is a redistribution and modification of that MIT-licensed project. The original copyright notice and license text are preserved in [LICENSE](LICENSE), with an additional modification copyright notice for this repository.
+### 许可证
 
-Security notes:
-
-- bot tokens are stored in `~/.claude-to-im/config.env`
-- keep that file at permission mode `600`
-- logs redact common secret patterns
-
-See:
-
-- [SECURITY.md](SECURITY.md)
-- [LICENSE](LICENSE)
+本项目基于上游 MIT 项目修改和再分发，原始版权声明和许可证文本保留在 [LICENSE](LICENSE) 中。
