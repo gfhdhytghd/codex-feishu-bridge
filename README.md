@@ -28,7 +28,7 @@ codex auth login
 推荐安装：
 
 ```bash
-git clone https://github.com/viewer12/codex-feishu-bridge.git ~/code/codex-feishu-bridge
+git clone https://github.com/gfhdhytghd/codex-feishu-bridge.git ~/code/codex-feishu-bridge
 bash ~/code/codex-feishu-bridge/scripts/install-codex.sh
 ```
 
@@ -41,7 +41,7 @@ bash ~/code/codex-feishu-bridge/scripts/install-codex.sh --link
 手动安装：
 
 ```bash
-git clone https://github.com/viewer12/codex-feishu-bridge.git ~/.codex/skills/codex-to-im
+git clone https://github.com/gfhdhytghd/codex-feishu-bridge.git ~/.codex/skills/codex-to-im
 cd ~/.codex/skills/codex-to-im
 npm install
 npm run build
