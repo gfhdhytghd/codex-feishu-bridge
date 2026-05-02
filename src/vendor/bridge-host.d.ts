@@ -64,6 +64,7 @@ export interface UpsertChannelBindingInput {
   channelType: string;
   chatId: string;
   codepilotSessionId: string;
+  sdkSessionId?: string;
   workingDirectory: string;
   model: string;
 }

@@ -57,6 +57,7 @@ export function createBinding(
     channelType: address.channelType,
     chatId: address.chatId,
     codepilotSessionId: session.id,
+    sdkSessionId: '',
     workingDirectory: defaultCwd,
     model: defaultModel,
   });
@@ -77,6 +78,7 @@ export function bindToSession(
     channelType: address.channelType,
     chatId: address.chatId,
     codepilotSessionId,
+    sdkSessionId: (session as unknown as { sdk_session_id?: string }).sdk_session_id || '',
     workingDirectory: session.working_directory,
     model: session.model,
   });

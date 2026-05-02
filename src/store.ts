@@ -213,6 +213,7 @@ export class JsonFileStore implements BridgeStore {
       const updated: ChannelBinding = {
         ...existing,
         codepilotSessionId: data.codepilotSessionId,
+        sdkSessionId: data.sdkSessionId ?? existing.sdkSessionId,
         workingDirectory: data.workingDirectory,
         model: data.model,
         updatedAt: now(),
@@ -226,7 +227,7 @@ export class JsonFileStore implements BridgeStore {
       channelType: data.channelType,
       chatId: data.chatId,
       codepilotSessionId: data.codepilotSessionId,
-      sdkSessionId: '',
+      sdkSessionId: data.sdkSessionId ?? '',
       workingDirectory: data.workingDirectory,
       model: data.model,
       mode: (this.settings.get('bridge_default_mode') as 'code' | 'plan' | 'ask') || 'code',
