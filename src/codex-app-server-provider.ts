@@ -42,6 +42,8 @@ type TurnState = {
   tokenUsage: any;
   seenToolUses: Set<string>;
   tempFiles: string[];
+  idleTimer: ReturnType<typeof setTimeout> | null;
+  lastActivityAt: number;
 };
 
 const MIME_EXT: Record<string, string> = {
@@ -73,6 +75,10 @@ function appServerDisabled(): boolean {
 
 function requestTimeoutMs(): number {
   return Number.parseInt(process.env.CTI_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS || '', 10) || 30_000;
+}
+
+function turnIdleTimeoutMs(): number {
+  return Number.parseInt(process.env.CTI_CODEX_APP_SERVER_TURN_IDLE_TIMEOUT_MS || '', 10) || 60_000;
 }
 
 function appServerArgs(): string[] {
@@ -121,7 +127,11 @@ class AppServerClient {
             turn.controller.close();
           } catch { /* controller already closed */ }
         }
+        if (turn.idleTimer) clearTimeout(turn.idleTimer);
         cleanupFiles(turn.tempFiles);
+      }
+      for (const turn of this.threadToTurn.values()) {
+        if (turn.idleTimer) clearTimeout(turn.idleTimer);
       }
       this.turnStates.clear();
       this.threadToTurn.clear();
@@ -231,6 +241,7 @@ class AppServerClient {
   registerTurn(state: TurnState): void {
     if (state.turnId) this.turnStates.set(state.turnId, state);
     this.threadToTurn.set(state.threadId, state);
+    this.touchTurn(state);
   }
 
   updateTurnId(state: TurnState, turnId: string): void {
@@ -252,7 +263,8 @@ class AppServerClient {
       ? this.turnStates.get(params.turnId)
       : params.threadId
         ? this.threadToTurn.get(params.threadId)
-        : undefined;
+      : undefined;
+    if (turn) this.touchTurn(turn);
 
     switch (msg.method) {
       case 'turn/started': {
@@ -286,6 +298,7 @@ class AppServerClient {
         turn.controller.close();
         if (turn.turnId) this.turnStates.delete(turn.turnId);
         this.threadToTurn.delete(turn.threadId);
+        if (turn.idleTimer) clearTimeout(turn.idleTimer);
         cleanupFiles(turn.tempFiles);
         break;
       }
@@ -306,6 +319,7 @@ class AppServerClient {
       : params.threadId
         ? this.threadToTurn.get(params.threadId)
         : undefined;
+    if (turn) this.touchTurn(turn);
 
     try {
       if (method === 'item/commandExecution/requestApproval') {
@@ -357,6 +371,26 @@ class AppServerClient {
   private respond(id: string, result: any): void {
     if (!this.child || this.closed) return;
     this.child.stdin.write(`${JSON.stringify({ id, result })}\n`);
+  }
+
+  private touchTurn(turn: TurnState): void {
+    turn.lastActivityAt = Date.now();
+    if (turn.idleTimer) clearTimeout(turn.idleTimer);
+    const timeout = turnIdleTimeoutMs();
+    turn.idleTimer = setTimeout(() => {
+      if (turn.completed) return;
+      const idleMs = Date.now() - turn.lastActivityAt;
+      const err = new Error(`Codex app-server turn idle timed out after ${idleMs}ms`);
+      console.warn('[codex-app-server]', err.message);
+      turn.completed = true;
+      try {
+        turn.controller.error(err);
+      } catch { /* controller already closed */ }
+      if (turn.turnId) this.turnStates.delete(turn.turnId);
+      this.threadToTurn.delete(turn.threadId);
+      cleanupFiles(turn.tempFiles);
+      this.child?.kill('SIGTERM');
+    }, timeout);
   }
 
   private emitCompletedItem(turn: TurnState, item: any): void {
@@ -492,6 +526,8 @@ export class CodexAppServerProvider implements LLMProvider {
               tokenUsage: null,
               seenToolUses: new Set(),
               tempFiles,
+              idleTimer: null,
+              lastActivityAt: Date.now(),
             };
             (turnState as any).provider = self;
             self.client.registerTurn(turnState);
